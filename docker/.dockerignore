@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Virtual Environments
+.venv
+
+# Python Cache & Compiled Files
+__pycache__/
+*.py[cod]
+
+# Testing & Coverage
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Linters & Type Checking Cache
+.ruff_cache/
+.mypy_cache/
+
+# Local Environment Variables
+.env
+.env.*
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Data
+.DS_Store
+Thumbs.db
+
+docker/
+docker-compose*.yml
+Makefile

@@ -1,0 +1,104 @@
+
+version: "3.9"
+
+services:
+
+  # ─────────────────────────────────────────
+  # PostgreSQL 16
+  # ─────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: spendwise_postgres
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: spendwise
+      POSTGRES_USER: spendwise
+      POSTGRES_PASSWORD: spendwise_dev_password
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spendwise -d spendwise"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - spendwise
+
+  # ─────────────────────────────────────────
+  # PostgreSQL — Test database
+  # A separate database for tests — never contaminates dev data
+  # ─────────────────────────────────────────
+  postgres_test:
+    image: postgres:16-alpine
+    container_name: spendwise_postgres_test
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: spendwise_test
+      POSTGRES_USER: spendwise
+      POSTGRES_PASSWORD: spendwise_dev_password
+    ports:
+      - "5433:5432"    # Different host port to avoid conflict
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spendwise -d spendwise_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - spendwise
+
+  # ─────────────────────────────────────────
+  # Redis 7
+  # ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: spendwise_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes    # Enable AOF persistence
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - spendwise
+
+  # ─────────────────────────────────────────
+  # API (development — with hot reload)
+  # ─────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: spendwise_api
+    restart: unless-stopped
+    volumes:
+      # Mount source code for hot reload
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - spendwise
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  spendwise:
+    driver: bridge
