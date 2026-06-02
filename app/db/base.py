@@ -5,7 +5,7 @@ All ORM models inherit from Base. Mixins provide reusable columns
 (timestamps, soft delete) without inheritance pollution.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -19,6 +19,7 @@ class Base(DeclarativeBase):
     the older `declarative_base()` function provides better type support
     and Mypy integration.
     """
+
     pass
 
 
@@ -63,7 +64,7 @@ class SoftDeleteMixin:
         DateTime(timezone=True),
         nullable=True,
         default=None,
-        index=True,    # Indexed because every query filters on this
+        index=True,  # Indexed because every query filters on this
     )
 
     @property
@@ -73,4 +74,4 @@ class SoftDeleteMixin:
 
     def soft_delete(self) -> None:
         """Mark this record as deleted. Call session.flush() after."""
-        self.deleted_at = datetime.now(timezone.utc)
+        self.deleted_at = datetime.now(UTC)

@@ -42,10 +42,10 @@ dev:  ## Run development server with hot reload (requires running DB and Redis)
 
 .PHONY: run
 run:  ## Run production server locally
-	$(UV) run gunicorn app.main:app \
+	$(UV) run granian --interface asgi app.main:app \
 		--workers 4 \
-		--worker-class uvicorn.workers.UvicornWorker \
-		--bind 0.0.0.0:8000
+		--host 0.0.0.0 \
+		--port 8000
 
 # ─────────────────────────────────────────
 # Docker
@@ -142,8 +142,16 @@ test-watch:  ## Run tests and re-run on file changes (requires pytest-watch)
 	$(UV) run ptw -- -x -q
 
 # ─────────────────────────────────────────
-# Code quality
+# Code quality & Security
 # ─────────────────────────────────────────
+.PHONY: pre-commit-install
+pre-commit-install:  ## Install git pre-commit hook
+	$(UV) run pre-commit install
+
+.PHONY: pre-commit-run
+pre-commit-run:  ## Run pre-commit hooks manually on all files
+	$(UV) run pre-commit run --all-files
+
 .PHONY: lint
 lint:  ## Run ruff linter
 	$(UV) run ruff check app/ tests/
@@ -164,8 +172,16 @@ format-check:  ## Check code formatting without making changes
 typecheck:  ## Run mypy type checker
 	$(UV) run mypy app/
 
+.PHONY: security-check
+security-check:  ## Run bandit to find common security issues in python code
+	$(UV) run bandit -c pyproject.toml -r app/
+
+.PHONY: audit
+audit:  ## Run pip-audit to scan dependencies for known vulnerabilities
+	$(UV) run pip-audit
+
 .PHONY: check
-check: lint format-check typecheck  ## Run all code quality checks
+check: lint format-check typecheck security-check audit  ## Run all code quality and security checks
 
 # ─────────────────────────────────────────
 # Utilities

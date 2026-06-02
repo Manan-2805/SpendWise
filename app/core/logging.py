@@ -1,4 +1,3 @@
-
 """
 Structured logging configuration using structlog.
 
@@ -13,6 +12,7 @@ Usage anywhere in the application:
 
 import logging
 import sys
+from typing import Any
 
 import structlog
 
@@ -29,23 +29,20 @@ def configure_logging(debug: bool = False) -> None:
         # Merge context variables bound via bind_contextvars()
         # Used for correlation IDs that persist across a request
         structlog.contextvars.merge_contextvars,
-
         # Add the log level name ("info", "error", etc.)
         structlog.stdlib.add_log_level,
-
         # Add the logger name (module path)
         structlog.stdlib.add_logger_name,
-
         # Add ISO 8601 timestamp in UTC
         structlog.processors.TimeStamper(fmt="iso", utc=True),
-
         # Render exception info (exc_info=True in log call)
         structlog.processors.StackInfoRenderer(),
     ]
 
     if debug:
         # Development: pretty-printed, coloured output
-        processors = shared_processors + [
+        processors: list[Any] = [
+            *shared_processors,
             # Format exceptions as strings for console output
             structlog.dev.set_exc_info,
             structlog.dev.ConsoleRenderer(colors=True),
@@ -53,7 +50,8 @@ def configure_logging(debug: bool = False) -> None:
         log_level = logging.DEBUG
     else:
         # Production: structured JSON output
-        processors = shared_processors + [
+        processors = [
+            *shared_processors,
             # Convert exception info to a dict for JSON serialisation
             structlog.processors.dict_tracebacks,
             structlog.processors.JSONRenderer(),

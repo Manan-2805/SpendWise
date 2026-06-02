@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=False,       # DATABASE_URL == database_url
-        extra="ignore",             # Ignore env vars not defined here
+        case_sensitive=False,  # DATABASE_URL == database_url
+        extra="ignore",  # Ignore env vars not defined here
     )
 
     # ─────────────────────────────────────────
@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     # ─────────────────────────────────────────
     # Computed fields — derived at initialisation
     # ─────────────────────────────────────────
-    @computed_field  # type: ignore[misc]
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def ASYNC_DATABASE_URL(self) -> str:
         """
@@ -88,7 +88,7 @@ class Settings(BaseSettings):
             return url.replace("postgresql://", "postgresql+asyncpg://", 1)
         return url
 
-    @computed_field  # type: ignore[misc]
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def GOOGLE_OAUTH_ENABLED(self) -> bool:
         """True only when both Google OAuth credentials are provided."""
@@ -106,7 +106,7 @@ class Settings(BaseSettings):
         if not self.DEBUG and len(self.SECRET_KEY) < 32:
             raise ValueError(
                 "SECRET_KEY must be at least 32 characters in production. "
-                "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
             )
         return self
 

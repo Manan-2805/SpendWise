@@ -63,11 +63,4 @@ ENTRYPOINT ["./entrypoint.sh"]
 # Worker count formula: (2 × CPU cores) + 1
 # For a 2-core container: 5 workers
 # Adjust --workers based on your deployment target
-CMD ["gunicorn", "app.main:app", \
-     "--workers", "4", \
-     "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--bind", "0.0.0.0:8000", \
-     "--timeout", "120", \
-     "--keep-alive", "5", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-"]
+CMD ["granian", "--interface", "asgi", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "app.main:app"]

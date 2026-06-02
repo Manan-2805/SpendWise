@@ -17,10 +17,10 @@ Usage in API exception handlers:
 
 from decimal import Decimal
 
-
 # ─────────────────────────────────────────────────────────────
 # Base exception
 # ─────────────────────────────────────────────────────────────
+
 
 class SpendWiseError(Exception):
     """
@@ -29,6 +29,7 @@ class SpendWiseError(Exception):
     All custom exceptions inherit from this — catching SpendWiseError
     catches everything the application intentionally raises.
     """
+
     status_code: int = 500
     code: str = "INTERNAL_ERROR"
 
@@ -39,15 +40,19 @@ class SpendWiseError(Exception):
             self.code = code
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(message={self.message!r}, code={self.code!r})"
+        return (
+            f"{self.__class__.__name__}(message={self.message!r}, code={self.code!r})"
+        )
 
 
 # ─────────────────────────────────────────────────────────────
 # 400 — Bad Request / Validation failures
 # ─────────────────────────────────────────────────────────────
 
+
 class BadRequestError(SpendWiseError):
     """Generic bad request — the client sent something invalid."""
+
     status_code = 400
     code = "BAD_REQUEST"
 
@@ -63,6 +68,7 @@ class ValidationError(SpendWiseError):
     validation). This is for domain-level rules like:
     "You cannot create a transaction with a future date without a note."
     """
+
     status_code = 400
     code = "VALIDATION_ERROR"
 
@@ -74,8 +80,10 @@ class ValidationError(SpendWiseError):
 # 401 — Unauthenticated
 # ─────────────────────────────────────────────────────────────
 
+
 class AuthenticationError(SpendWiseError):
     """Could not verify who the user is."""
+
     status_code = 401
     code = "AUTHENTICATION_FAILED"
 
@@ -85,6 +93,7 @@ class AuthenticationError(SpendWiseError):
 
 class InvalidTokenError(AuthenticationError):
     """JWT is malformed, expired, or has been tampered with."""
+
     code = "INVALID_TOKEN"
 
     def __init__(self, message: str = "Token is invalid or expired") -> None:
@@ -93,6 +102,7 @@ class InvalidTokenError(AuthenticationError):
 
 class InvalidCredentialsError(AuthenticationError):
     """Email and password combination is wrong."""
+
     code = "INVALID_CREDENTIALS"
 
     def __init__(self) -> None:
@@ -103,6 +113,7 @@ class InvalidCredentialsError(AuthenticationError):
 # 403 — Forbidden / Authorisation failures
 # ─────────────────────────────────────────────────────────────
 
+
 class AccessDeniedError(SpendWiseError):
     """
     The user is authenticated but does not have permission.
@@ -111,15 +122,19 @@ class AccessDeniedError(SpendWiseError):
     technically correct — returning 403 reveals that the resource exists.
     Use AccessDeniedError only when it is safe to reveal existence.
     """
+
     status_code = 403
     code = "ACCESS_DENIED"
 
-    def __init__(self, message: str = "You do not have permission to access this resource") -> None:
+    def __init__(
+        self, message: str = "You do not have permission to access this resource"
+    ) -> None:
         super().__init__(message)
 
 
 class InactiveUserError(AccessDeniedError):
     """User account exists but has been deactivated."""
+
     code = "INACTIVE_USER"
 
     def __init__(self) -> None:
@@ -128,6 +143,7 @@ class InactiveUserError(AccessDeniedError):
 
 class UnverifiedEmailError(AccessDeniedError):
     """User has not verified their email address."""
+
     code = "EMAIL_NOT_VERIFIED"
 
     def __init__(self) -> None:
@@ -138,8 +154,10 @@ class UnverifiedEmailError(AccessDeniedError):
 # 404 — Not Found
 # ─────────────────────────────────────────────────────────────
 
+
 class NotFoundError(SpendWiseError):
     """Base class for all 'resource not found' exceptions."""
+
     status_code = 404
     code = "NOT_FOUND"
 
@@ -182,8 +200,10 @@ class TransactionNotFoundError(NotFoundError):
 # 409 — Conflict
 # ─────────────────────────────────────────────────────────────
 
+
 class ConflictError(SpendWiseError):
     """A resource already exists or there is a state conflict."""
+
     status_code = 409
     code = "CONFLICT"
 
@@ -211,14 +231,14 @@ class UsernameAlreadyTakenError(ConflictError):
 # 422 — Business Logic Validation
 # ─────────────────────────────────────────────────────────────
 
+
 class InsufficientFundsError(ValidationError):
     """Transaction would result in a negative balance below allowed threshold."""
+
     code = "INSUFFICIENT_FUNDS"
 
     def __init__(self, required: Decimal, available: Decimal) -> None:
-        super().__init__(
-            f"Insufficient funds: need {required}, have {available}"
-        )
+        super().__init__(f"Insufficient funds: need {required}, have {available}")
         self.required = required
         self.available = available
 
@@ -226,6 +246,7 @@ class InsufficientFundsError(ValidationError):
 # ─────────────────────────────────────────────────────────────
 # 429 — Rate Limited (raised manually, usually handled by slowapi)
 # ─────────────────────────────────────────────────────────────
+
 
 class RateLimitExceededError(SpendWiseError):
     status_code = 429
@@ -239,11 +260,15 @@ class RateLimitExceededError(SpendWiseError):
 # 503 — Service Unavailable
 # ─────────────────────────────────────────────────────────────
 
+
 class ServiceUnavailableError(SpendWiseError):
     """A required external service (DB, Redis, email) is unreachable."""
+
     status_code = 503
     code = "SERVICE_UNAVAILABLE"
 
     def __init__(self, service: str = "service") -> None:
-        super().__init__(f"The {service} is currently unavailable — please try again shortly")
+        super().__init__(
+            f"The {service} is currently unavailable — please try again shortly"
+        )
         self.service = service
