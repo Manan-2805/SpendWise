@@ -18,7 +18,6 @@ from app.core.config import settings
 from app.db.base import Base
 
 # Import all models so they register themselves with Base.metadata
-from app.models import user, category, transaction
 
 # ── Alembic Config ────────────────────────────────────────────
 config = context.config
@@ -73,8 +72,8 @@ async def run_async_migrations() -> None:
     """
     connectable = create_async_engine(
         settings.ASYNC_DATABASE_URL,
-        poolclass=pool.NullPool,    # NullPool: no connection pooling during migrations
-                                    # Each migration gets a fresh connection — safer
+        poolclass=pool.NullPool,  # NullPool: no connection pooling during migrations
+        # Each migration gets a fresh connection — safer
     )
 
     async with connectable.connect() as connection:

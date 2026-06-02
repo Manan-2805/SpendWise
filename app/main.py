@@ -7,13 +7,14 @@ Usage:
     Production:   gunicorn app.main:app --worker-class uvicorn.workers.UvicornWorker
 """
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
 
 from app.core.config import settings
 from app.core.exceptions import SpendWiseError
@@ -21,7 +22,7 @@ from app.core.logging import configure_logging
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     """
     Manage application startup and shutdown events.
 
@@ -42,10 +43,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         from sqlalchemy import text
         from sqlalchemy.ext.asyncio import AsyncSession
+
         async with AsyncSession(engine) as session:
             await session.execute(text("SELECT 1"))
     except Exception as e:
         import structlog
+
         structlog.get_logger().critical(
             "database_connection_failed",
             error=str(e),
@@ -54,6 +57,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         raise
 
     import structlog
+
     structlog.get_logger().info(
         "application_started",
         app_name=settings.APP_NAME,
@@ -65,9 +69,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # ── Shutdown ─────────────────────────────────────────────
     from app.db.session import engine
+
     await engine.dispose()
 
     import structlog
+
     structlog.get_logger().info("application_shutdown")
 
 
@@ -101,9 +107,14 @@ def create_application() -> FastAPI:
         allow_origins=settings.ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Correlation-ID", "X-Requested-With"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-Correlation-ID",
+            "X-Requested-With",
+        ],
         expose_headers=["X-Process-Time", "X-Correlation-ID"],
-        max_age=600,    # Cache preflight for 10 minutes
+        max_age=600,  # Cache preflight for 10 minutes
     )
 
     # Custom middleware registered here — implementations in Part 10
@@ -122,7 +133,7 @@ def create_application() -> FastAPI:
     # ── Exception Handlers ────────────────────────────────────
     @application.exception_handler(SpendWiseError)
     async def spendwise_exception_handler(
-        request: Request, exc: SpendWiseError
+        _: Request, exc: SpendWiseError
     ) -> JSONResponse:
         """
         Convert SpendWise domain exceptions to HTTP responses.
@@ -138,7 +149,7 @@ def create_application() -> FastAPI:
 
     @application.exception_handler(RequestValidationError)
     async def validation_exception_handler(
-        request: Request, exc: RequestValidationError
+        _: Request, exc: RequestValidationError
     ) -> JSONResponse:
         """
         Convert Pydantic validation errors to a consistent format.
@@ -147,11 +158,13 @@ def create_application() -> FastAPI:
         errors: list[dict[str, Any]] = []
         for error in exc.errors():
             field: str = ".".join(str(loc) for loc in error["loc"] if loc != "body")
-            errors.append({
-                "field": field,
-                "message": error["msg"],
-                "type": error["type"],
-            })
+            errors.append(
+                {
+                    "field": field,
+                    "message": error["msg"],
+                    "type": error["type"],
+                }
+            )
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={
@@ -163,13 +176,14 @@ def create_application() -> FastAPI:
 
     @application.exception_handler(Exception)
     async def unhandled_exception_handler(
-        request: Request, exc: Exception
+        request: Request, _: Exception
     ) -> JSONResponse:
         """
         Catch-all for unexpected exceptions.
         Never leak stack traces or internal details in production.
         """
         import structlog
+
         structlog.get_logger().exception(
             "unhandled_exception",
             path=str(request.url.path),
