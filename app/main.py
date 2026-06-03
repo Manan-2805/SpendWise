@@ -31,7 +31,7 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
 
     This replaces the deprecated @app.on_event("startup") decorator.
     """
-    # ── Startup ──────────────────────────────────────────────
+    # Startup
     configure_logging(debug=settings.DEBUG)
 
     # Import here to avoid circular imports during module load
@@ -67,7 +67,7 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
 
     yield
 
-    # ── Shutdown ─────────────────────────────────────────────
+    # Shutdown
     from app.db.session import engine
 
     await engine.dispose()
@@ -96,7 +96,7 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # ── Middleware ────────────────────────────────────────────
+    # Middleware
     # Middleware is executed in REVERSE order of registration.
     # The last middleware added runs FIRST on incoming requests.
     # We want: CorrelationID → Timing → Logging → CORS → route handler
@@ -125,12 +125,12 @@ def create_application() -> FastAPI:
     # application.add_middleware(RequestTimingMiddleware)
     # application.add_middleware(CorrelationIDMiddleware)
 
-    # ── Routers ───────────────────────────────────────────────
+    # Routers
     # Routers registered here — implementations in Part 6
     # from app.api.v1.router import api_v1_router
     # application.include_router(api_v1_router, prefix=settings.API_V1_PREFIX)
 
-    # ── Exception Handlers ────────────────────────────────────
+    # Exception Handlers
     @application.exception_handler(SpendWiseError)
     async def spendwise_exception_handler(
         _: Request, exc: SpendWiseError
@@ -198,7 +198,7 @@ def create_application() -> FastAPI:
             },
         )
 
-    # ── Health Check ──────────────────────────────────────────
+    # Health Check
     @application.get("/health", tags=["Health"], include_in_schema=settings.DEBUG)
     async def health() -> dict[str, str]:
         """Shallow health check — confirms the application process is alive."""

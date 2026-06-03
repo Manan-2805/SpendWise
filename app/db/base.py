@@ -13,11 +13,16 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class Base(DeclarativeBase):
     """
-    Base class for all SQLAlchemy ORM models.
+    Base class for all ORM models.
 
-    Inheriting from DeclarativeBase (SQLAlchemy 2.0 style) instead of
-    the older `declarative_base()` function provides better type support
-    and Mypy integration.
+    SQLAlchemy 2.0 style: inherit from DeclarativeBase directly.
+    This replaces the old pattern: Base = declarative_base()
+
+    What Base provides:
+    - Base.metadata: the MetaData object that tracks all table definitions
+      Alembic reads Base.metadata to detect schema changes.
+    - Automatic table name detection from __tablename__
+    - Type annotation support for Mapped[] columns
     """
 
     pass
