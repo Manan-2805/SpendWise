@@ -25,47 +25,35 @@ class Settings(BaseSettings):
         extra="ignore",  # Ignore env vars not defined here
     )
 
-    # ─────────────────────────────────────────
     # Application
-    # ─────────────────────────────────────────
     APP_NAME: str = "SpendWise"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
     ALLOWED_ORIGINS: list[str] = []
 
-    # ─────────────────────────────────────────
     # Database
-    # ─────────────────────────────────────────
     DATABASE_URL: PostgresDsn
     DATABASE_POOL_SIZE: int = 20
     DATABASE_MAX_OVERFLOW: int = 10
 
-    # ─────────────────────────────────────────
     # Redis
-    # ─────────────────────────────────────────
     REDIS_URL: RedisDsn
     CELERY_BROKER_URL: str
     CELERY_RESULT_BACKEND: str
 
-    # ─────────────────────────────────────────
     # Security — JWT
-    # ─────────────────────────────────────────
     SECRET_KEY: str
     ALGORITHM: Literal["HS256", "HS384", "HS512"] = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # ─────────────────────────────────────────
     # Google OAuth2
-    # ─────────────────────────────────────────
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
 
-    # ─────────────────────────────────────────
     # Email
-    # ─────────────────────────────────────────
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
@@ -73,9 +61,7 @@ class Settings(BaseSettings):
     EMAILS_FROM_EMAIL: str = "noreply@spendwise.local"
     EMAILS_FROM_NAME: str = "SpendWise"
 
-    # ─────────────────────────────────────────
     # Computed fields — derived at initialisation
-    # ─────────────────────────────────────────
     @computed_field  # type: ignore[prop-decorator]
     @property
     def ASYNC_DATABASE_URL(self) -> str:
@@ -94,9 +80,7 @@ class Settings(BaseSettings):
         """True only when both Google OAuth credentials are provided."""
         return bool(self.GOOGLE_CLIENT_ID and self.GOOGLE_CLIENT_SECRET)
 
-    # ─────────────────────────────────────────
     # Cross-field validation
-    # ─────────────────────────────────────────
     @model_validator(mode="after")
     def validate_secret_key_strength(self) -> "Settings":
         """

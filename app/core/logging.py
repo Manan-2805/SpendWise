@@ -24,7 +24,7 @@ def configure_logging(debug: bool = False) -> None:
     Call this once at application startup (in the lifespan function).
     Subsequent calls are safe but redundant.
     """
-    # ── Shared processors — run on every log event ────────────
+    # Shared processors — run on every log event
     shared_processors: list[structlog.types.Processor] = [
         # Merge context variables bound via bind_contextvars()
         # Used for correlation IDs that persist across a request
@@ -58,7 +58,7 @@ def configure_logging(debug: bool = False) -> None:
         ]
         log_level = logging.WARNING
 
-    # ── Configure structlog ───────────────────────────────────
+    # Configure structlog
     structlog.configure(
         processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(log_level),
@@ -67,7 +67,7 @@ def configure_logging(debug: bool = False) -> None:
         cache_logger_on_first_use=True,
     )
 
-    # ── Configure stdlib logging ──────────────────────────────
+    # Configure stdlib logging
     # Redirect standard library loggers (uvicorn, sqlalchemy, etc.)
     # through structlog so all logs share the same format
     logging.basicConfig(

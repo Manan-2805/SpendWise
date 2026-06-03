@@ -154,19 +154,19 @@ pre-commit-run:  ## Run pre-commit hooks manually on all files
 
 .PHONY: lint
 lint:  ## Run ruff linter
-	$(UV) run ruff check app/ tests/
+	$(UV) run ruff check alembic/ app/ tests/
 
 .PHONY: lint-fix
 lint-fix:  ## Run ruff linter and auto-fix issues
-	$(UV) run ruff check --fix app/ tests/
+	$(UV) run ruff check --fix alembic/ app/ tests/
 
 .PHONY: format
 format:  ## Format code with ruff
-	$(UV) run ruff format app/ tests/
+	$(UV) run ruff format alembic/ app/ tests/
 
 .PHONY: format-check
 format-check:  ## Check code formatting without making changes
-	$(UV) run ruff format --check app/ tests/
+	$(UV) run ruff format --check alembic/ app/ tests/
 
 .PHONY: typecheck
 typecheck:  ## Run mypy type checker

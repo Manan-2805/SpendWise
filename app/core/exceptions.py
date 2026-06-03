@@ -17,9 +17,7 @@ Usage in API exception handlers:
 
 from decimal import Decimal
 
-# ─────────────────────────────────────────────────────────────
 # Base exception
-# ─────────────────────────────────────────────────────────────
 
 
 class SpendWiseError(Exception):
@@ -45,9 +43,7 @@ class SpendWiseError(Exception):
         )
 
 
-# ─────────────────────────────────────────────────────────────
 # 400 — Bad Request / Validation failures
-# ─────────────────────────────────────────────────────────────
 
 
 class BadRequestError(SpendWiseError):
@@ -76,9 +72,7 @@ class ValidationError(SpendWiseError):
         super().__init__(message)
 
 
-# ─────────────────────────────────────────────────────────────
 # 401 — Unauthenticated
-# ─────────────────────────────────────────────────────────────
 
 
 class AuthenticationError(SpendWiseError):
@@ -109,9 +103,7 @@ class InvalidCredentialsError(AuthenticationError):
         super().__init__("Invalid email or password")
 
 
-# ─────────────────────────────────────────────────────────────
 # 403 — Forbidden / Authorisation failures
-# ─────────────────────────────────────────────────────────────
 
 
 class AccessDeniedError(SpendWiseError):
@@ -150,9 +142,7 @@ class UnverifiedEmailError(AccessDeniedError):
         super().__init__("Please verify your email address before continuing")
 
 
-# ─────────────────────────────────────────────────────────────
 # 404 — Not Found
-# ─────────────────────────────────────────────────────────────
 
 
 class NotFoundError(SpendWiseError):
@@ -196,9 +186,7 @@ class TransactionNotFoundError(NotFoundError):
         self.transaction_id = transaction_id
 
 
-# ─────────────────────────────────────────────────────────────
 # 409 — Conflict
-# ─────────────────────────────────────────────────────────────
 
 
 class ConflictError(SpendWiseError):
@@ -227,9 +215,7 @@ class UsernameAlreadyTakenError(ConflictError):
         self.username = username
 
 
-# ─────────────────────────────────────────────────────────────
 # 422 — Business Logic Validation
-# ─────────────────────────────────────────────────────────────
 
 
 class InsufficientFundsError(ValidationError):
@@ -243,9 +229,7 @@ class InsufficientFundsError(ValidationError):
         self.available = available
 
 
-# ─────────────────────────────────────────────────────────────
 # 429 — Rate Limited (raised manually, usually handled by slowapi)
-# ─────────────────────────────────────────────────────────────
 
 
 class RateLimitExceededError(SpendWiseError):
@@ -256,9 +240,7 @@ class RateLimitExceededError(SpendWiseError):
         super().__init__(message)
 
 
-# ─────────────────────────────────────────────────────────────
 # 503 — Service Unavailable
-# ─────────────────────────────────────────────────────────────
 
 
 class ServiceUnavailableError(SpendWiseError):
