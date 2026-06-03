@@ -36,7 +36,7 @@ class PaginatedResponse[T](BaseModel):
         """Factory method — calculates derived fields automatically."""
         import math
 
-        pages = math.ceil(total / per_page) if total > 0 else 0
+        pages: int = math.ceil(total / per_page) if total > 0 else 0
         return cls(
             items=items,
             total=total,

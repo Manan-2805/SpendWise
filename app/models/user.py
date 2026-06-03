@@ -62,6 +62,11 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
         server_default="true",
         nullable=False,
     )
+
+    refresh_token_hash: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
     # is_active=False: account suspended or deactivated.
     # Different from soft delete: soft-deleted users are completely gone.
     # Inactive users can be reactivated.
