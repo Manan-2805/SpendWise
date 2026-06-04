@@ -1,30 +1,23 @@
-from collections.abc import Sequence
 from datetime import date
 from decimal import Decimal
 from typing import Any, Literal
 
-from sqlalchemy import Result, Select, extract, func, select
-from sqlalchemy.engine.row import Row
+from sqlalchemy import and_, extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import InstrumentedAttribute, joinedload
+from sqlalchemy.orm import joinedload
 
+from app.models.category import Category
 from app.models.transaction import Transaction
 from app.repositories.base import BaseRepository
-from app.schemas.transaction import TransactionType
 
 
 class TransactionRepository(BaseRepository[Transaction]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(Transaction, session)
 
-    async def get_by_id_with_category(
-        self, id: int, user_id: int
-    ) -> Transaction | None:
-        """
-        Get a transaction by ID with its category eagerly loaded.
-        Also ensures the transaction belongs to the given user (security).
-        """
-        stmt: Select[tuple[Transaction]] = (
+    async def get_with_category(self, id: int, user_id: int) -> Transaction | None:
+        """Get a transaction by ID with its category eagerly loaded, verifying ownership."""
+        stmt = (
             select(Transaction)
             .options(joinedload(Transaction.category))
             .where(
@@ -33,7 +26,7 @@ class TransactionRepository(BaseRepository[Transaction]):
                 Transaction.deleted_at.is_(None),
             )
         )
-        result: Result[tuple[Transaction]] = await self.session.execute(stmt)
+        result = await self.session.execute(stmt)
         return result.unique().scalar_one_or_none()
 
     async def get_filtered(
@@ -43,107 +36,196 @@ class TransactionRepository(BaseRepository[Transaction]):
         date_from: date | None = None,
         date_to: date | None = None,
         category_id: int | None = None,
-        transaction_type: TransactionType | None = None,
+        type: str | None = None,
         min_amount: Decimal | None = None,
         max_amount: Decimal | None = None,
         search: str | None = None,
-        sort_by: str = "date",
+        sort_by: str = "transaction_date",
         sort_order: Literal["asc", "desc"] = "desc",
         skip: int = 0,
         limit: int = 100,
-    ) -> list[Transaction]:
-        """
-        Advanced filtering for transactions.
-        Returns a list of transactions (without category loaded by default).
-        """
-        stmt: Select[tuple[Transaction]] = select(Transaction).where(
-            Transaction.user_id == user_id, Transaction.deleted_at.is_(None)
-        )
+    ) -> tuple[list[Transaction], int]:
+        """Advanced filtering and pagination for transactions, returning (items, total_count)."""
+        conditions = [
+            Transaction.user_id == user_id,
+            Transaction.deleted_at.is_(None),
+        ]
 
-        # Apply filters
         if date_from:
-            stmt = stmt.where(Transaction.transaction_date >= date_from)
+            conditions.append(Transaction.transaction_date >= date_from)
         if date_to:
-            stmt = stmt.where(Transaction.transaction_date <= date_to)
+            conditions.append(Transaction.transaction_date <= date_to)
         if category_id is not None:
-            stmt = stmt.where(Transaction.category_id == category_id)
-        if transaction_type:
-            stmt = stmt.where(Transaction.transaction_type == transaction_type)
+            conditions.append(Transaction.category_id == category_id)
+        if type:
+            conditions.append(Transaction.type == type)
         if min_amount is not None:
-            stmt = stmt.where(Transaction.amount >= min_amount)
+            conditions.append(Transaction.amount >= min_amount)
         if max_amount is not None:
-            stmt = stmt.where(Transaction.amount <= max_amount)
+            conditions.append(Transaction.amount <= max_amount)
         if search:
-            stmt = stmt.where(Transaction.description.ilike(f"%{search}%"))
+            conditions.append(Transaction.description.ilike(f"%{search}%"))
 
-        # Apply sorting
-        sort_column: Any | InstrumentedAttribute[date] = getattr(
-            Transaction, sort_by, Transaction.transaction_date
-        )
+        count_stmt = select(func.count(Transaction.id)).where(and_(*conditions))
+        total_count = await self.session.scalar(count_stmt) or 0
+
+        stmt = select(Transaction).where(and_(*conditions))
+
+        allowed_sort_fields = {
+            "transaction_date": Transaction.transaction_date,
+            "date": Transaction.transaction_date,
+            "amount": Transaction.amount,
+            "description": Transaction.description,
+            "created_at": Transaction.created_at,
+        }
+        sort_column = allowed_sort_fields.get(sort_by, Transaction.transaction_date)
+
         if sort_order == "desc":
             stmt = stmt.order_by(sort_column.desc())
         else:
             stmt = stmt.order_by(sort_column.asc())
 
         stmt = stmt.offset(skip).limit(limit)
-        result: Result[tuple[Transaction]] = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        result = await self.session.execute(stmt)
+        items = list(result.scalars().all())
 
-    async def count_filtered(
-        self,
-        user_id: int,
-        *,
-        date_from: date | None = None,
-        date_to: date | None = None,
-        category_id: int | None = None,
-        transaction_type: TransactionType | None = None,
-        min_amount: Decimal | None = None,
-        max_amount: Decimal | None = None,
-        search: str | None = None,
-    ) -> int:
-        """Count transactions matching the same filters as get_filtered."""
-        stmt: Select[tuple[int]] = select(func.count(Transaction.id)).where(
-            Transaction.user_id == user_id, Transaction.deleted_at.is_(None)
-        )
-        if date_from:
-            stmt = stmt.where(Transaction.transaction_date >= date_from)
-        if date_to:
-            stmt = stmt.where(Transaction.transaction_date <= date_to)
-        if category_id is not None:
-            stmt = stmt.where(Transaction.category_id == category_id)
-        if transaction_type:
-            stmt = stmt.where(Transaction.transaction_type == transaction_type)
-        if min_amount is not None:
-            stmt = stmt.where(Transaction.amount >= min_amount)
-        if max_amount is not None:
-            stmt = stmt.where(Transaction.amount <= max_amount)
-        if search:
-            stmt = stmt.where(Transaction.description.ilike(f"%{search}%"))
-        result: Result[tuple[int]] = await self.session.execute(stmt)
-        return result.scalar_one()
+        return items, total_count
 
     async def get_monthly_summary(
         self, user_id: int, year: int, month: int
     ) -> dict[str, Decimal]:
-        """
-        Return total income and total expense for a specific month.
-        """
-        stmt: Select[tuple[str, Decimal]] = (
+        """Return total income and total expense for a specific month using index-friendly date filters."""
+        start_date = date(year, month, 1)
+        end_date: date = (
+            date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        )
+
+        stmt = (
             select(
-                Transaction.transaction_type,
+                Transaction.type,
                 func.sum(Transaction.amount).label("total"),
             )
             .where(
-                Transaction.user_id == user_id,
-                Transaction.deleted_at.is_(None),
-                extract("year", Transaction.transaction_date) == year,
-                extract("month", Transaction.transaction_date) == month,
+                and_(
+                    Transaction.user_id == user_id,
+                    Transaction.deleted_at.is_(None),
+                    Transaction.transaction_date >= start_date,
+                    Transaction.transaction_date < end_date,
+                )
             )
-            .group_by(Transaction.transaction_type)
+            .group_by(Transaction.type)
         )
-        result: Result[tuple[str, Decimal]] = await self.session.execute(stmt)
-        rows: Sequence[Row[tuple[str, Decimal]]] = result.all()
-        summary: dict[str, Decimal] = {"income": Decimal("0"), "expense": Decimal("0")}
+        result = await self.session.execute(stmt)
+        rows = result.all()
+        summary = {"income": Decimal("0"), "expense": Decimal("0")}
         for row in rows:
-            summary[row.transaction_type] = row.total or Decimal("0")
+            summary[row[0]] = row[1] or Decimal("0")
         return summary
+
+    async def get_category_breakdown(
+        self,
+        user_id: int,
+        date_from: date,
+        date_to: date,
+        type: str = "expense",
+    ) -> list[dict[str, Any]]:
+        """Category breakdown for a date range using JOIN + GROUP BY + window function."""
+        stmt = (
+            select(
+                Category.id.label("category_id"),
+                Category.name.label("category_name"),
+                Category.color.label("category_color"),
+                Category.icon.label("category_icon"),
+                func.sum(Transaction.amount).label("total"),
+                func.count(Transaction.id).label("count"),
+                (
+                    func.sum(Transaction.amount)
+                    / func.sum(func.sum(Transaction.amount)).over()
+                    * 100
+                ).label("percentage"),
+            )
+            .join(Category, Transaction.category_id == Category.id)
+            .where(
+                and_(
+                    Transaction.user_id == user_id,
+                    Transaction.deleted_at.is_(None),
+                    Transaction.type == type,
+                    Transaction.transaction_date >= date_from,
+                    Transaction.transaction_date <= date_to,
+                )
+            )
+            .group_by(
+                Category.id,
+                Category.name,
+                Category.color,
+                Category.icon,
+            )
+            .order_by(func.sum(Transaction.amount).desc())
+        )
+        result = await self.session.execute(stmt)
+        rows = result.all()
+        return [
+            {
+                "category_id": row.category_id,
+                "category_name": row.category_name,
+                "category_color": row.category_color,
+                "category_icon": row.category_icon,
+                "total": row.total,
+                "count": row.count,
+                "percentage": round(float(row.percentage or 0), 2),
+            }
+            for row in rows
+        ]
+
+    async def get_balance_trend(
+        self, user_id: int, date_from: date, date_to: date
+    ) -> list[dict[str, Any]]:
+        """Monthly balance (income - expenses) for each month in the range."""
+        from sqlalchemy import case as sql_case
+
+        stmt = (
+            select(
+                extract("year", Transaction.transaction_date).label("year"),
+                extract("month", Transaction.transaction_date).label("month"),
+                func.sum(
+                    sql_case(
+                        (Transaction.type == "income", Transaction.amount),
+                        else_=Decimal("0"),
+                    )
+                ).label("income"),
+                func.sum(
+                    sql_case(
+                        (Transaction.type == "expense", Transaction.amount),
+                        else_=Decimal("0"),
+                    )
+                ).label("expense"),
+            )
+            .where(
+                and_(
+                    Transaction.user_id == user_id,
+                    Transaction.deleted_at.is_(None),
+                    Transaction.transaction_date >= date_from,
+                    Transaction.transaction_date <= date_to,
+                )
+            )
+            .group_by(
+                extract("year", Transaction.transaction_date),
+                extract("month", Transaction.transaction_date),
+            )
+            .order_by(
+                extract("year", Transaction.transaction_date),
+                extract("month", Transaction.transaction_date),
+            )
+        )
+        result = await self.session.execute(stmt)
+        rows = result.all()
+        return [
+            {
+                "year": int(row.year),
+                "month": int(row.month),
+                "income": row.income or Decimal("0"),
+                "expense": row.expense or Decimal("0"),
+                "balance": (row.income or Decimal("0")) - (row.expense or Decimal("0")),
+            }
+            for row in rows
+        ]

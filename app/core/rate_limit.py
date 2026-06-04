@@ -6,16 +6,14 @@ from slowapi.util import get_remote_address
 
 from app.core.config import settings
 
-# Create the limiter with a Redis backend for distributed deployments
 limiter = Limiter(
-    key_func=get_remote_address,  # Identify clients by IP address
-    storage_uri=str(settings.REDIS_URL),  # Redis URL - must support async
-    default_limits=["100/minute"],  # Global fallback limit (overridden per route)
-    strategy="fixed-window",  # Fixed window algorithm (simplest)
+    key_func=get_remote_address,
+    storage_uri=str(settings.REDIS_URL),
+    default_limits=["200/minute"],
+    strategy="fixed-window",
 )
 
 
-# Override the default 429 response to match SpendWise's error format
 def custom_rate_limit_handler(_: Request, exc: RateLimitExceeded) -> JSONResponse:
     return JSONResponse(
         status_code=429,

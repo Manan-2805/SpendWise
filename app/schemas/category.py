@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,6 +19,7 @@ class CategoryBase(BaseModel):
         pattern=r"^#[0-9A-Fa-f]{6}$",
         description="Hex color code e.g. '#FF5733'",
     )
+    type: Literal["income", "expense", "both"]
 
 
 class CategoryCreate(CategoryBase):
@@ -34,6 +35,7 @@ class CategoryUpdate(BaseModel):
     description: str | None = None
     icon: str | None = None
     color: str | None = None
+    type: Literal["income", "expense", "both"] | None = None
 
 
 class CategoryResponse(CategoryBase):

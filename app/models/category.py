@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, SoftDeleteMixin, TimestampMixin
@@ -13,70 +20,50 @@ if TYPE_CHECKING:
 
 
 class Category(Base, TimestampMixin, SoftDeleteMixin):
-    """
-    User-owned expense/income categories.
-
-    Each user has their own set of categories — categories are not shared
-    between users. This is enforced by the user_id foreign key.
-
-    The unique constraint (user_id, name) ensures a user cannot have two
-    categories with the same name, but different users can reuse names
-    (e.g. everyone can have a "Food" category).
-    """
-
     __tablename__: str = "categories"
 
-    # Table-level constraints and indexes
     __table_args__ = (
-        # Composite unique constraint: same user cannot have two categories
-        # with the same name. Different users can both have "Food".
-        UniqueConstraint(
-            "user_id",
-            "name",
-            name="uq_category_user_name",  # Named constraints are easier to debug
+        UniqueConstraint("user_id", "name", name="uq_category_user_name"),
+        CheckConstraint(
+            "type IN ('income', 'expense', 'both')", name="ck_category_type"
         ),
-        # Note: additional indexes can also go here as Index() objects
     )
 
-    # Columns
     id: Mapped[int] = mapped_column(primary_key=True)
-
-    user_id: Mapped[int] = mapped_column(
+    user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
-    # ondelete="CASCADE": if the user is deleted, their categories are too.
-    # This matches the relationship cascade above — they must agree.
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    icon: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    color: Mapped[str | None] = mapped_column(String(7), nullable=True)
 
-    name: Mapped[str] = mapped_column(
-        String(100),
+    type: Mapped[str] = mapped_column(
+        String(10),
+        server_default="both",
+        default="both",
+        nullable=False,
+    )
+    is_system: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default="false",
+        default=False,
         nullable=False,
     )
 
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    icon: Mapped[str | None] = mapped_column(
-        String(50),  # Emoji or icon identifier
-        nullable=True,
-    )
-
-    color: Mapped[str | None] = mapped_column(
-        String(7),  # "#FF5733" — hex color with # prefix, 7 chars
-        nullable=True,
-    )
-
-    # Relationships
-    user: Mapped[User] = relationship(
+    user: Mapped[User | None] = relationship(
         "User",
         back_populates="categories",
         lazy="noload",
     )
 
+    # Financial records must never be silently cascade deleted
     transactions: Mapped[list[Transaction]] = relationship(
         "Transaction",
         back_populates="category",
-        cascade="all, delete-orphan",
+        cascade="save-update, merge",
         lazy="noload",
     )
 

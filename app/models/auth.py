@@ -1,82 +1,98 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    Boolean,
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
 
-from .user import User
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class OAuthAccount(Base, TimestampMixin):
     __tablename__: str = "oauth_accounts"
 
     __table_args__ = (
-        # A user can only have ONE Google account linked
-        UniqueConstraint("provider", "provider_user_id", name="uq_oauth_provider_user"),
+        UniqueConstraint(
+            "provider", "provider_account_id", name="uq_oauth_provider_account"
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
-    provider: Mapped[str] = mapped_column(String(50), nullable=False)  # "google"
-    provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    provider_account_id: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    # We store the provider's access token to make API calls on user's behalf later
-    access_token: Mapped[str] = mapped_column(Text, nullable=False)
+    access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    user: Mapped[User] = relationship("User", back_populates="oauth_accounts")
+    user: Mapped[User] = relationship(
+        "User",
+        back_populates="oauth_accounts",
+        lazy="noload",
+    )
 
 
 class RefreshToken(Base):
-    """
-    Stores hashed refresh tokens for revocation and rotation tracking.
-    """
-
-    __tablename__ = "refresh_tokens"
+    __tablename__: str = "refresh_tokens"
 
     __table_args__ = (
-        # Fast lookups when validating a token hash
-        Index("ix_refresh_tokens_token_hash", "token_hash"),
-        # Fast lookups when revoking all tokens for a user
+        Index("ix_refresh_tokens_jti", "jti", unique=True),
+        Index("ix_refresh_tokens_family_id", "family_id"),
         Index("ix_refresh_tokens_user_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-
-    # We store the SHA-256 hash of the JWT, not the JWT itself
-    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
-
-    # The unique 'jti' claim from the JWT, used for Token Family tracking
     jti: Mapped[str] = mapped_column(String(36), nullable=False)
+    family_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    # When this token expires (matches the JWT exp claim)
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
-
-    # Revocation flag. If True, this token has been used or manually revoked.
-    is_revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-
-    # Timestamp of creation/rotation
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    rotated_from_id: Mapped[int | None] = mapped_column(
+        ForeignKey("refresh_tokens.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
-    # Relationship
-    user: Mapped[User] = relationship("User", back_populates="refresh_tokens")
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    user: Mapped[User] = relationship(
+        "User",
+        back_populates="refresh_tokens",
+        lazy="noload",
+    )
+
+    rotated_from: Mapped[RefreshToken | None] = relationship(
+        "RefreshToken",
+        remote_side=[id],
+        lazy="noload",
+    )

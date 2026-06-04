@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,15 +27,31 @@ class UserRepository(BaseRepository[User]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def update_refresh_token_hash(
-        self, user_id: int, token_hash: str | None
-    ) -> None:
-        """Store the hashed refresh token for a user."""
-        user: User | None = await self.get_by_id(user_id)
-        if user:
-            user.refresh_token_hash = token_hash
-            await self.session.flush()
+    async def get_by_verification_token(self, token: str) -> User | None:
+        """Get a user by verification token (non-deleted)."""
+        stmt = select(User).where(
+            User.verification_token == token, User.deleted_at.is_(None)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
-    async def clear_refresh_token_hash(self, user_id: int) -> None:
-        """Invalidate all refresh tokens for a user."""
-        await self.update_refresh_token_hash(user_id, None)
+    async def get_by_reset_token(self, token: str) -> User | None:
+        """Get a user by password reset token (non-deleted)."""
+        stmt = select(User).where(
+            User.reset_password_token == token, User.deleted_at.is_(None)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def update(self, id: int, **data: Any) -> User | None:
+        """Update a user profile and automatically increment cache_version."""
+        instance: User | None = await self.get_by_id(id)
+        if not instance:
+            return None
+        instance.cache_version += 1
+        for key, value in data.items():
+            if hasattr(instance, key):
+                setattr(instance, key, value)
+        await self.session.flush()
+        await self.session.refresh(instance)
+        return instance

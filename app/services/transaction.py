@@ -17,17 +17,19 @@ from app.schemas.transaction import (
     TransactionResponse,
     TransactionUpdate,
 )
+from app.services.audit import AuditService
 
 
 class TransactionService:
     def __init__(self, db: AsyncSession) -> None:
         self.repo = TransactionRepository(db)
         self.category_repo = CategoryRepository(db)
+        self.audit_service = AuditService(db)
 
     async def get_by_id_with_category(
         self, transaction_id: int, user_id: int
     ) -> TransactionResponse:
-        transaction: Transaction | None = await self.repo.get_by_id_with_category(
+        transaction: Transaction | None = await self.repo.get_with_category(
             transaction_id, user_id
         )
         if not transaction:
@@ -40,13 +42,13 @@ class TransactionService:
         filters: TransactionFilters,
         offset: int,
         limit: int,
-    ) -> list[TransactionResponse]:
-        transactions: list[Transaction] = await self.repo.get_filtered(
+    ) -> tuple[list[TransactionResponse], int]:
+        transactions, total = await self.repo.get_filtered(
             user_id=user_id,
             date_from=filters.date_from,
             date_to=filters.date_to,
             category_id=filters.category_id,
-            transaction_type=filters.transaction_type,
+            type=filters.type,
             min_amount=filters.min_amount,
             max_amount=filters.max_amount,
             search=filters.search,
@@ -55,28 +57,23 @@ class TransactionService:
             skip=offset,
             limit=limit,
         )
-        return [TransactionResponse.model_validate(t) for t in transactions]
+        return [TransactionResponse.model_validate(t) for t in transactions], total
 
-    async def count_filtered(self, user_id: int, filters: TransactionFilters) -> int:
-        return await self.repo.count_filtered(
-            user_id=user_id,
-            date_from=filters.date_from,
-            date_to=filters.date_to,
-            category_id=filters.category_id,
-            transaction_type=filters.transaction_type,
-            min_amount=filters.min_amount,
-            max_amount=filters.max_amount,
-            search=filters.search,
-        )
+    async def invalidate_cache(self, user_id: int) -> None:
+        """Invalidate all report cache keys for this user on any mutation."""
+        from app.core.redis import redis_client
+
+        keys = await redis_client.keys(f"spendwise:report:{user_id}:*")
+        if keys:
+            await redis_client.delete(*keys)
 
     async def create(
         self, data: TransactionCreate, user_id: int
     ) -> TransactionResponse:
-        # Validate category exists and belongs to user
         category: Category | None = await self.category_repo.get_by_id(data.category_id)
         if not category:
             raise CategoryNotFoundError(data.category_id)
-        if category.user_id != user_id:
+        if category.user_id != user_id and not category.is_system:
             raise AccessDeniedError("Category does not belong to you")
 
         transaction: Transaction = await self.repo.create(
@@ -84,40 +81,64 @@ class TransactionService:
             category_id=data.category_id,
             amount=data.amount,
             description=data.description,
-            transaction_date=data.date,
-            transaction_type=data.transaction_type,
+            transaction_date=data.transaction_date,
+            type=data.type,
             notes=data.notes,
             tags=data.tags,
+        )
+
+        await self.invalidate_cache(user_id)
+        await self.audit_service.log_action(
+            action="TRANSACTION_CREATED",
+            resource_type="Transaction",
+            resource_id=transaction.id,
+            user_id=user_id,
+            new_values={
+                "amount": str(data.amount),
+                "category_id": data.category_id,
+                "type": data.type,
+            },
         )
         return TransactionResponse.model_validate(transaction)
 
     async def update(
         self, transaction_id: int, data: TransactionUpdate, user_id: int
     ) -> TransactionResponse:
-        # Verify transaction exists and belongs to user
         existing: Transaction | None = await self.repo.get_by_id(transaction_id)
         if not existing:
             raise TransactionNotFoundError(transaction_id)
         if existing.user_id != user_id:
             raise AccessDeniedError()
 
-        # If category_id is being updated, validate the new category
         if data.category_id is not None:
             category: Category | None = await self.category_repo.get_by_id(
                 data.category_id
             )
             if not category:
                 raise CategoryNotFoundError(data.category_id)
-            if category.user_id != user_id:
+            if category.user_id != user_id and not category.is_system:
                 raise AccessDeniedError("Category does not belong to you")
 
         update_data: dict[str, Any] = data.model_dump(exclude_unset=True)
-        # Convert schema field 'date' to model field 'transaction_date' if present
-        if "date" in update_data:
-            update_data["transaction_date"] = update_data.pop("date")
+
+        old_values = {
+            "amount": str(existing.amount),
+            "category_id": existing.category_id,
+            "type": existing.type,
+        }
 
         updated: Transaction | None = await self.repo.update(
             transaction_id, **update_data
+        )
+
+        await self.invalidate_cache(user_id)
+        await self.audit_service.log_action(
+            action="TRANSACTION_UPDATED",
+            resource_type="Transaction",
+            resource_id=transaction_id,
+            user_id=user_id,
+            old_values=old_values,
+            new_values=update_data,
         )
         return TransactionResponse.model_validate(updated)
 
@@ -127,4 +148,12 @@ class TransactionService:
             raise TransactionNotFoundError(transaction_id)
         if transaction.user_id != user_id:
             raise AccessDeniedError()
+
         await self.repo.soft_delete(transaction_id)
+        await self.invalidate_cache(user_id)
+        await self.audit_service.log_action(
+            action="TRANSACTION_DELETED",
+            resource_type="Transaction",
+            resource_id=transaction_id,
+            user_id=user_id,
+        )
