@@ -1,0 +1,130 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: spendwise-postgres-prod
+    environment:
+      POSTGRES_DB: spendwise
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: production_password_here
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d spendwise"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1000M
+
+  redis:
+    image: redis:7-alpine
+    container_name: spendwise-redis-prod
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data_prod:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 500M
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: spendwise-web-prod
+    command: granian --interface asgi --host 0.0.0.0 --port 8000 app.main:app
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=False
+      - DATABASE_URL=postgresql://postgres:production_password_here@postgres:5432/spendwise
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SECRET_KEY=production_secret_key_at_least_32_chars_long_12345
+      - CORS_ORIGINS=["https://spendwise.com"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1500M
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: spendwise-celery-worker-prod
+    command: celery -A app.worker.celery_app.celery_app worker --loglevel=info
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=False
+      - DATABASE_URL=postgresql://postgres:production_password_here@postgres:5432/spendwise
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SECRET_KEY=production_secret_key_at_least_32_chars_long_12345
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1000M
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: spendwise-celery-beat-prod
+    command: celery -A app.worker.celery_app.celery_app beat --loglevel=info
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=False
+      - DATABASE_URL=postgresql://postgres:production_password_here@postgres:5432/spendwise
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SECRET_KEY=production_secret_key_at_least_32_chars_long_12345
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 500M
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:

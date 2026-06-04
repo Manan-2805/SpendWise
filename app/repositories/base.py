@@ -82,7 +82,7 @@ class BaseRepository[ModelType: RepositoryModel]:
         if not instance:
             return None
         for key, value in data.items():
-            if hasattr(instance, key) and value is not None:
+            if hasattr(instance, key):
                 setattr(instance, key, value)
         await self.session.flush()
         await self.session.refresh(instance)

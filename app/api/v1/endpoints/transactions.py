@@ -1,8 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_active_user, get_db
-from app.core.exceptions import CategoryNotFoundError, TransactionNotFoundError
+from app.core.exceptions import (
+    AccessDeniedError,
+    CategoryNotFoundError,
+    TransactionNotFoundError,
+)
 from app.models.user import User
 from app.schemas.common import PaginatedResponse, PaginationParams
 from app.schemas.transaction import (
@@ -27,12 +31,7 @@ async def list_transactions(
     """List transactions for the authenticated user with filtering and pagination."""
     transaction_service = TransactionService(db)
 
-    total: int = await transaction_service.count_filtered(
-        current_user.id,
-        filters,
-    )
-
-    items: list[TransactionResponse] = await transaction_service.get_filtered(
+    items, total = await transaction_service.get_filtered(
         current_user.id,
         filters,
         offset=pagination.offset,
@@ -58,12 +57,11 @@ async def create_transaction(
     """Create a new transaction."""
     transaction_service = TransactionService(db)
     try:
-        transaction: TransactionResponse = await transaction_service.create(
-            data, current_user.id
-        )
-        return transaction
+        return await transaction_service.create(data, current_user.id)
     except CategoryNotFoundError as e:
-        raise HTTPException(status_code=404, detail=e.message) from e
+        raise e
+    except AccessDeniedError as e:
+        raise e
 
 
 @router.get("/{transaction_id}", response_model=TransactionWithCategoryResponse)
@@ -75,15 +73,14 @@ async def get_transaction(
     """Get a specific transaction by ID, including category details."""
     transaction_service = TransactionService(db)
     try:
-        transaction: TransactionResponse = (
-            await transaction_service.get_by_id_with_category(
-                transaction_id,
-                current_user.id,
-            )
+        return await transaction_service.get_by_id_with_category(
+            transaction_id,
+            current_user.id,
         )
-        return transaction
     except TransactionNotFoundError as e:
-        raise HTTPException(status_code=404, detail=e.message) from e
+        raise e
+    except AccessDeniedError as e:
+        raise e
 
 
 @router.patch("/{transaction_id}", response_model=TransactionResponse)
@@ -96,14 +93,17 @@ async def update_transaction(
     """Update a transaction."""
     transaction_service = TransactionService(db)
     try:
-        transaction: TransactionResponse = await transaction_service.update(
+        return await transaction_service.update(
             transaction_id,
             data,
             current_user.id,
         )
-        return transaction
     except TransactionNotFoundError as e:
-        raise HTTPException(status_code=404, detail=e.message) from e
+        raise e
+    except CategoryNotFoundError as e:
+        raise e
+    except AccessDeniedError as e:
+        raise e
 
 
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -117,4 +117,6 @@ async def delete_transaction(
     try:
         await transaction_service.soft_delete(transaction_id, current_user.id)
     except TransactionNotFoundError as e:
-        raise HTTPException(status_code=404, detail=e.message) from e
+        raise e
+    except AccessDeniedError as e:
+        raise e

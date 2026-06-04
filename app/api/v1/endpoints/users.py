@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
+from fastapi_cache.decorator import cache
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_active_user, get_db
+from app.core.cache import versioned_key_builder
 from app.models.user import User
 from app.schemas.auth import PasswordChangeRequest
 from app.schemas.user import UserResponse, UserUpdate
@@ -11,7 +13,9 @@ router = APIRouter()
 
 
 @router.get("/me", response_model=UserResponse)
+@cache(expire=3600, key_builder=versioned_key_builder)
 async def get_me(
+    _: Request,
     current_user: User = Depends(get_current_active_user),
 ) -> User:
     """Get current authenticated user's profile."""
