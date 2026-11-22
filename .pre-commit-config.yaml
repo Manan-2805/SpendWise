@@ -1,4 +1,10 @@
 repos:
+  # Secret scanning
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+
   # Basic file fixes
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
