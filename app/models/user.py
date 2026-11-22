@@ -37,8 +37,18 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
         Boolean, server_default="false", default=False, nullable=False
     )
 
-    verification_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    reset_password_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    verification_token: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
+    verification_token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    auth_version: Mapped[int] = mapped_column(
+        server_default="0", default=0, nullable=False
+    )
+    reset_password_token: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
     reset_token_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

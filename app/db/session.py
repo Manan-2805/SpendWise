@@ -1,4 +1,5 @@
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import structlog
@@ -22,7 +23,7 @@ engine: AsyncEngine = create_async_engine(
     pool_pre_ping=True,
     pool_recycle=3600,
     pool_timeout=30,
-    echo=settings.DEBUG,
+    hide_parameters=True,
 )
 
 AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
@@ -31,6 +32,20 @@ AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     expire_on_commit=False,
     autoflush=False,
 )
+
+
+async def run_after_commit(session: AsyncSession) -> None:
+    for callback in session.info.pop("spendwise_after_commit", ()):
+        try:
+            await callback()
+        except Exception as exc:
+            logger.error("after_commit_failed", error_type=type(exc).__name__)
+
+
+def after_commit(
+    session: AsyncSession, callback: Callable[[], Awaitable[None]]
+) -> None:
+    session.info.setdefault("spendwise_after_commit", []).append(callback)
 
 
 def setup_db_observability(async_engine: AsyncEngine) -> None:
@@ -51,8 +66,8 @@ def setup_db_observability(async_engine: AsyncEngine) -> None:
     def after_cursor_execute(
         conn: Any,
         _cursor: Any,
-        statement: str,
-        parameters: Any,
+        _statement: str,
+        _parameters: Any,
         _context: Any,
         executemany: bool,
     ) -> None:
@@ -65,17 +80,17 @@ def setup_db_observability(async_engine: AsyncEngine) -> None:
             logger.warning(
                 "slow_database_query",
                 duration_ms=round(duration_ms, 2),
-                statement=statement.replace("\n", " ")[:500],
-                parameters=str(parameters)[:200],
                 executemany=executemany,
             )
 
     @event.listens_for(sync_engine, "handle_error")
     def handle_error(exception_context: Any) -> None:
+        connection = exception_context.connection
+        if connection is not None and connection.info.get("query_start_time"):
+            connection.info["query_start_time"].pop()
         logger.error(
             "database_error",
-            original_exception=str(exception_context.original_exception),
-            statement=str(exception_context.statement)[:500],
+            error_type=type(exception_context.original_exception).__name__,
         )
 
 

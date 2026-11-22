@@ -6,7 +6,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 class CorrelationIDMiddleware(BaseHTTPMiddleware):
     """
-    Pure ASGI middleware that adds a correlation ID to every request.
+    Add a correlation ID to every request.
 
     It reads from X-Correlation-ID header if present, or generates a new UUID.
     Stores the ID in request.state for access in route handlers and dependencies.
@@ -17,8 +17,10 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         # Extract or generate correlation ID
-        correlation_id: str | None = request.headers.get("X-Correlation-ID")
-        if not correlation_id:
+        supplied_id = request.headers.get("X-Correlation-ID", "")
+        try:
+            correlation_id = str(uuid.UUID(supplied_id))
+        except ValueError:
             correlation_id = str(uuid.uuid4())
 
         # Store in request.state for access in routes/dependencies
@@ -27,10 +29,8 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
         # Bind to structlog contextvars so every log line includes it
         import structlog
 
-        structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
-
-        # Process the request
-        response = await call_next(request)
+        with structlog.contextvars.bound_contextvars(correlation_id=correlation_id):
+            response = await call_next(request)
 
         # Add correlation ID to response headers
         response.headers["X-Correlation-ID"] = correlation_id

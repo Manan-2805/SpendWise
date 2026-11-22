@@ -1,5 +1,14 @@
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+
+from app.core.config import settings
+from app.core.rate_limit import limiter
+from app.main import create_application
+
+
+@pytest.fixture(autouse=True)
+def disable_rate_limiting(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(limiter, "enabled", False)
 
 
 @pytest.mark.asyncio
@@ -14,8 +23,13 @@ async def test_security_headers_default(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_security_headers_docs(client: AsyncClient) -> None:
-    response = await client.get("/docs")
+async def test_security_headers_docs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "DEBUG", True)
+    async with AsyncClient(
+        transport=ASGITransport(app=create_application()), base_url="http://test"
+    ) as client:
+        response = await client.get("/docs")
+    assert response.status_code == 200
     headers = response.headers
     assert headers.get("content-security-policy") is not None
     csp = headers["content-security-policy"]
@@ -24,8 +38,13 @@ async def test_security_headers_docs(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_security_headers_redoc(client: AsyncClient) -> None:
-    response = await client.get("/redoc")
+async def test_security_headers_redoc(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "DEBUG", True)
+    async with AsyncClient(
+        transport=ASGITransport(app=create_application()), base_url="http://test"
+    ) as client:
+        response = await client.get("/redoc")
+    assert response.status_code == 200
     headers = response.headers
     assert headers.get("content-security-policy") is not None
     csp = headers["content-security-policy"]

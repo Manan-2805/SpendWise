@@ -1,228 +1,204 @@
-# scripts/run_load_test.py
-"""
-Fully automated load testing and monitoring orchestrator.
-
-This script:
-1. Dynamically parses base connection details from `.env`.
-2. Creates an isolated database named `spendwise_loadtest`.
-3. Executes database migrations using Alembic.
-4. Seeds 100 users and 10,000+ transactions into `spendwise_loadtest`.
-5. Starts the Prometheus and Grafana Docker services.
-6. Launches a temporary SpendWise API instance on port 8001.
-7. Opens the system web browser directly to the Grafana Dashboard.
-8. Runs the Locust load testing script in headless mode.
-9. Performs full cleanup (kills the API, stops containers, drops the isolated DB).
-"""
+"""Measure transaction listings and cached reports against a disposable local API."""
 
 import argparse
 import asyncio
+import json
+import math
 import os
+import platform
+import secrets
 import subprocess
 import sys
-import time
-import webbrowser
-from urllib.parse import urlparse, urlunparse
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from time import perf_counter
+from uuid import uuid4
 
 import httpx
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 
-def parse_db_urls(db_url: str) -> tuple[str, str]:
-    """Parse connection URL to generate admin (postgres) and target (loadtest) URLs."""
-    if db_url.startswith("postgresql+asyncpg://"):
-        raw_url = db_url.replace("postgresql+asyncpg://", "postgresql://", 1)
-    else:
-        raw_url = db_url
+@dataclass
+class Measurements:
+    latencies: list[float] = field(default_factory=list)
+    errors: int = 0
 
-    parsed = urlparse(raw_url)
-    admin_parsed = parsed._replace(path="/postgres")
-    loadtest_parsed = parsed._replace(path="/spendwise_loadtest")
-
-    admin_url = urlunparse(admin_parsed).replace("postgresql://", "postgresql+asyncpg://", 1)
-    loadtest_url = urlunparse(loadtest_parsed).replace("postgresql://", "postgresql+asyncpg://", 1)
-
-    return admin_url, loadtest_url
-
-
-async def manage_loadtest_db(db_url: str, action: str) -> None:
-    """Create or drop the isolated loadtest database."""
-    admin_url, _ = parse_db_urls(db_url)
-    engine = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
-
-    async with engine.connect() as conn:
-        if action == "create":
-            print("Creating isolated database 'spendwise_loadtest'...")
-            await conn.execute(text("DROP DATABASE IF EXISTS spendwise_loadtest WITH (FORCE)"))
-            await conn.execute(text("CREATE DATABASE spendwise_loadtest"))
-        elif action == "drop":
-            print("Dropping database 'spendwise_loadtest'...")
-            await conn.execute(text("DROP DATABASE IF EXISTS spendwise_loadtest WITH (FORCE)"))
-
-    await engine.dispose()
+    def summary(self, seconds: float) -> dict[str, float | int | None]:
+        latencies = sorted(self.latencies)
+        p95 = latencies[math.ceil(len(latencies) * 0.95) - 1] if latencies else None
+        return {
+            "requests": len(latencies),
+            "errors": self.errors,
+            "requests_per_second": round(len(latencies) / seconds, 2),
+            "p95_ms": round(p95, 2) if p95 is not None else None,
+        }
 
 
-def run_command(command: list[str], env: dict[str, str] | None = None) -> None:
-    """Synchronously run a system command and check for success."""
-    result = subprocess.run(command, env=env, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"Command {' '.join(command)} failed!")
-        print(f"Error output:\n{result.stderr}")
-        sys.exit(1)
+def benchmark_env() -> dict[str, str]:
+    database_port = os.getenv("TEST_POSTGRES_PORT", "55432")
+    redis_port = os.getenv("TEST_REDIS_PORT", "56379")
+    redis = f"redis://127.0.0.1:{redis_port}"
+    return os.environ | {
+        "ENVIRONMENT": "development",
+        "DEBUG": "false",
+        "DATABASE_URL": (
+            f"postgresql://spendwise_test:spendwise_test_local@127.0.0.1:{database_port}/spendwise_test"
+        ),
+        "REDIS_URL": f"{redis}/3",
+        "CELERY_BROKER_URL": f"{redis}/4",
+        "CELERY_RESULT_BACKEND": f"{redis}/5",
+        "SECRET_KEY": secrets.token_hex(32),
+        "RATE_LIMIT_DEFAULT": "1000000/minute",
+        "RATE_LIMIT_REGISTER": "10000/minute",
+        "SMTP_HOST": "",
+    }
+
+
+async def wait_for_api(client: httpx.AsyncClient, process: subprocess.Popen) -> None:
+    for _ in range(100):
+        if process.poll() is not None:
+            break
+        try:
+            response = await client.get("/health")
+            if response.is_success:
+                return
+        except httpx.TransportError:
+            pass
+        await asyncio.sleep(0.1)
+    raise RuntimeError("Benchmark API failed to start")
+
+
+async def create_scenario(client: httpx.AsyncClient, count: int) -> tuple[str, str]:
+    identity = uuid4().hex
+    password = f"Bench7!{secrets.token_hex(16)}"
+    registration = await client.post(
+        "/auth/register",
+        json={
+            "email": f"{identity}@example.com",
+            "username": identity,
+            "password": password,
+            "confirm_password": password,
+        },
+    )
+    registration.raise_for_status()
+    client.headers["Authorization"] = f"Bearer {registration.json()['access_token']}"
+    category = await client.post(
+        "/categories/", json={"name": "Benchmark", "type": "expense"}
+    )
+    category.raise_for_status()
+    today = datetime.now(UTC).date()
+    for number in range(count):
+        transaction = await client.post(
+            "/transactions/",
+            json={
+                "amount": "10.00",
+                "category_id": category.json()["id"],
+                "description": f"Benchmark expense {number}",
+                "transaction_date": today.isoformat(),
+                "type": "expense",
+            },
+        )
+        transaction.raise_for_status()
+
+    reports = f"/reports/monthly-summary?year={today.year}&month={today.month}"
+    warmup = await client.get(reports)
+    warmup.raise_for_status()
+    return "/transactions/?per_page=20", reports
+
+
+async def measure(
+    client: httpx.AsyncClient, routes: tuple[str, str], concurrency: int, seconds: float
+) -> dict[str, dict[str, int | float | None]]:
+    samples = {route: Measurements() for route in routes}
+    start = perf_counter()
+    end = start + seconds
+
+    async def worker(index: int) -> None:
+        while perf_counter() < end:
+            route = routes[index % len(routes)]
+            sample = samples[route]
+            before = perf_counter()
+            try:
+                response = await client.get(route)
+                sample.errors += int(not response.is_success)
+            except httpx.TransportError:
+                sample.errors += 1
+            sample.latencies.append((perf_counter() - before) * 1000)
+            index += 1
+
+    await asyncio.gather(*(worker(index) for index in range(concurrency)))
+    elapsed = perf_counter() - start
+    total = Measurements(
+        [value for sample in samples.values() for value in sample.latencies],
+        sum(sample.errors for sample in samples.values()),
+    )
+    return {"combined": total.summary(elapsed)} | {
+        route: sample.summary(elapsed) for route, sample in samples.items()
+    }
 
 
 async def main() -> None:
-    # 1. Parse arguments
-    parser = argparse.ArgumentParser(description="SpendWise Automated Load Tester")
-    parser.add_argument("--users", type=int, default=100, help="Number of concurrent users")
-    parser.add_argument("--rate", type=int, default=10, help="User spawn rate per second")
-    parser.add_argument("--time", type=str, default="60s", help="Duration of the load test (e.g. 60s, 5m)")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--seconds", type=float, default=15)
+    parser.add_argument("--concurrency", type=int, default=10)
+    parser.add_argument("--transactions", type=int, default=100)
+    parser.add_argument("--port", type=int, default=8001)
     args = parser.parse_args()
+    if min(args.seconds, args.concurrency, args.transactions) <= 0:
+        parser.error("Duration, concurrency, and transaction count must be positive")
 
-    # Import config after parsing settings to read env variables correctly
-    from app.core.config import settings
-
-    db_url = settings.DATABASE_URL
-    _, loadtest_url = parse_db_urls(db_url)
-
-    # Convert loadtest asyncpg URL back to standard postgresql URL for Alembic & Docker env
-    standard_loadtest_url = loadtest_url.replace("postgresql+asyncpg://", "postgresql://", 1)
-
-    print("\n========================================================")
-    print(" SpendWise Automated Load Test Pipeline Starting")
-    print(f" Parameters: {args.users} users @ {args.rate}/s for {args.time}")
-    print("========================================================\n")
-
-    # 2. Database Lifecycle - Setup
-    try:
-        await manage_loadtest_db(db_url, "create")
-    except Exception as e:
-        print(f"Failed to create database: {e}")
-        sys.exit(1)
-
-    # 3. Database Schema - Migrations
-    print("Running database migrations...")
-    env = os.environ.copy()
-    env["DATABASE_URL"] = standard_loadtest_url
-    run_command(["uv", "run", "alembic", "upgrade", "head"], env=env)
-
-    # 4. Database Seeding - Volume Data
-    print("Seeding database with 10k+ transactions...")
-    run_command(["uv", "run", "python", "-B", "scripts/seed_load_test_db.py"], env=env)
-
-    # 5. Monitoring - Up
-    print("Starting Prometheus and Grafana docker services...")
-    run_command(["docker", "compose", "-f", "docker-compose.monitoring.yml", "up", "-d"])
-
-    # 6. Start API server
-    print("Starting SpendWise API server on port 8001...")
-    api_env = env.copy()
-    api_env["REDIS_URL"] = "redis://localhost:6379/1"
-    api_env["CELERY_BROKER_URL"] = "redis://localhost:6379/1"
-    api_env["CELERY_RESULT_BACKEND"] = "redis://localhost:6379/1"
-    api_env["RATE_LIMIT_LOGIN"] = "10000/minute"
-    api_env["RATE_LIMIT_REGISTER"] = "10000/minute"
-    api_env["ENVIRONMENT"] = "development"
-    api_env["DEBUG"] = "True"
-
-    # Start uvicorn as a background subprocess
-    log_file = open("uvicorn_loadtest.log", "w", encoding="utf-8")
-    api_process = subprocess.Popen(
-        ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"],
-        env=api_env,
-        stdout=log_file,
-        stderr=subprocess.STDOUT,
+    env = benchmark_env()
+    environment_bin = Path(sys.executable).parent
+    subprocess.run(
+        [environment_bin / "alembic", "upgrade", "head"], env=env, check=True
     )
-
-    # Wait for API server to become ready
-    print("Waiting for API server to become responsive...")
-    api_ready = False
-    for _ in range(20):
+    with subprocess.Popen(
+        [
+            environment_bin / "granian",
+            "--interface",
+            "asgi",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(args.port),
+            "--workers",
+            "2",
+            "--no-access-log",
+            "app.main:app",
+        ],
+        env=env,
+        stdout=subprocess.DEVNULL,
+    ) as process:
         try:
-            res = httpx.get("http://localhost:8001/api/v1/health", timeout=1.0)
-            if res.status_code == 200:
-                api_ready = True
-                break
-        except Exception:
-            pass
-        time.sleep(0.5)
-
-    log_file.close()
-
-    if not api_ready:
-        print("Error: API server failed to start or did not become responsive.")
-        if os.path.exists("uvicorn_loadtest.log"):
-            with open("uvicorn_loadtest.log", encoding="utf-8") as f:
-                print(f"\n--- API Server Log Output ---\n{f.read()}\n")
+            async with httpx.AsyncClient(
+                base_url=f"http://127.0.0.1:{args.port}/api/v1", timeout=8
+            ) as client:
+                await wait_for_api(client, process)
+                routes = await create_scenario(client, args.transactions)
+                results = await measure(client, routes, args.concurrency, args.seconds)
+        finally:
+            process.terminate()
             try:
-                os.remove("uvicorn_loadtest.log")
-            except Exception:
-                pass
-        api_process.terminate()
-        await manage_loadtest_db(db_url, "drop")
-        sys.exit(1)
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
 
-    try:
-        os.remove("uvicorn_loadtest.log")
-    except Exception:
-        pass
-
-    print("API server is healthy and responding.")
-
-    # 7. Open Grafana Dashboard
-    print("Opening Grafana dashboard in the system browser...")
-    webbrowser.open("http://localhost:3000/datasources")
-
-    # 8. Execute Locust Load Test
-    print(f"Executing Locust load test headless against port 8001 for {args.time}...")
-    locust_command = [
-        "uv",
-        "run",
-        "locust",
-        "-f",
-        "tests/load/locustfile.py",
-        "--headless",
-        "--users",
-        str(args.users),
-        "--spawn-rate",
-        str(args.rate),
-        "--run-time",
-        args.time,
-        "--host",
-        "http://localhost:8001",
-        "--csv",
-        "tests/load/results/locust_report",
-    ]
-
-    # Run locust and display real-time console output
-    locust_process = subprocess.Popen(locust_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-
-    # Stream output to console
-    while True:
-        line = locust_process.stdout.readline() if locust_process.stdout else ""
-        if not line and locust_process.poll() is not None:
-            break
-        if line:
-            print(line.strip())
-
-    # 9. Cleanup
-    print("\n========================================================")
-    print(" Load Test Execution Finished — Commencing Cleanup")
-    print("========================================================\n")
-
-    print("Stopping API server...")
-    api_process.terminate()
-    api_process.wait()
-
-    print("Stopping Prometheus and Grafana docker services...")
-    run_command(["docker", "compose", "-f", "docker-compose.monitoring.yml", "down"])
-
-    try:
-        await manage_loadtest_db(db_url, "drop")
-    except Exception as e:
-        print(f"Failed to drop database: {e}")
-
-    print("\nLoad test pipeline run completed successfully.")
+    print(
+        json.dumps(
+            {
+                "system": f"{platform.system()} {platform.machine()}",
+                "logical_cpus": os.cpu_count(),
+                "server_workers": 2,
+                "duration_seconds": args.seconds,
+                "concurrency": args.concurrency,
+                "seeded_transactions": args.transactions,
+                "results": results,
+            },
+            indent=2,
+        )
+    )
+    if results["combined"]["errors"] or not results["combined"]["requests"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

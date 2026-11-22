@@ -10,7 +10,6 @@ async def test_base_repository_extended_crud(db_session: AsyncSession) -> None:
 
     # Test count initially
     c_init = await repo.count()
-    assert c_init == 0
 
     # Test create
     user = await repo.create(
@@ -27,12 +26,13 @@ async def test_base_repository_extended_crud(db_session: AsyncSession) -> None:
 
     # Test get_all with order_by asc
     users = await repo.get_all(order_by="username", descending=False)
-    assert len(users) == 1
-    assert users[0].username == "base_repo"
+    assert len(users) == c_init + 1
+    assert any(item.username == "base_repo" for item in users)
+    assert [item.username for item in users] == sorted(item.username for item in users)
 
     # Test get_all with order_by desc
     users_desc = await repo.get_all(order_by="username", descending=True)
-    assert len(users_desc) == 1
+    assert [item.id for item in users_desc] == [item.id for item in reversed(users)]
 
     # Test update nonexistent
     assert await repo.update(9999, username="foo") is None

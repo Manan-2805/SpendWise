@@ -26,7 +26,7 @@ async def list_transactions(
     filters: TransactionFilters = Depends(),
     pagination: PaginationParams = Depends(),
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> PaginatedResponse[TransactionResponse]:
     """List transactions for the authenticated user with filtering and pagination."""
     transaction_service = TransactionService(db)
@@ -52,7 +52,7 @@ async def list_transactions(
 async def create_transaction(
     data: TransactionCreate,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> TransactionResponse:
     """Create a new transaction."""
     transaction_service = TransactionService(db)
@@ -68,7 +68,7 @@ async def create_transaction(
 async def get_transaction(
     transaction_id: int,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> TransactionResponse:
     """Get a specific transaction by ID, including category details."""
     transaction_service = TransactionService(db)
@@ -88,7 +88,7 @@ async def update_transaction(
     transaction_id: int,
     data: TransactionUpdate,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> TransactionResponse:
     """Update a transaction."""
     transaction_service = TransactionService(db)
@@ -110,7 +110,7 @@ async def update_transaction(
 async def delete_transaction(
     transaction_id: int,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> None:
     """Delete a transaction (soft delete)."""
     transaction_service = TransactionService(db)

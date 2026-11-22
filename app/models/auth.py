@@ -57,6 +57,8 @@ class RefreshToken(Base):
         Index("ix_refresh_tokens_jti", "jti", unique=True),
         Index("ix_refresh_tokens_family_id", "family_id"),
         Index("ix_refresh_tokens_user_id", "user_id"),
+        Index("ix_refresh_tokens_token_hash", "token_hash", unique=True),
+        Index("ix_refresh_tokens_expires_at", "expires_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

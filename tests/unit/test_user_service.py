@@ -209,6 +209,7 @@ async def test_update_user_success() -> None:
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
+    service.repo.get_by_id = AsyncMock(return_value=mock_user)
     service.repo.update = AsyncMock(return_value=mock_user)
     service.audit_service.log_action = AsyncMock()
 

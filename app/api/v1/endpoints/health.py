@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Awaitable
 
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
@@ -58,26 +59,16 @@ async def liveness() -> dict[str, str]:
 @router.get("/health/ready", summary="Readiness Probe - Deep health check")
 async def readiness() -> JSONResponse:
     """Readiness probe verifying DB, Redis, and Celery broker are ready with a 200ms timeout."""
-    db_task = asyncio.create_task(check_db())
-    redis_task = asyncio.create_task(check_redis())
-    celery_task = asyncio.create_task(check_celery())
 
-    # Wait for checks to complete, enforcing a 200ms timeout
-    try:
-        db_ok = await asyncio.wait_for(db_task, timeout=0.2)
-    except (TimeoutError, Exception):
-        db_ok = False
+    async def check(probe: Awaitable[bool]) -> bool:
+        try:
+            return await asyncio.wait_for(probe, timeout=0.2)
+        except Exception:
+            return False
 
-    try:
-        redis_ok = await asyncio.wait_for(redis_task, timeout=0.2)
-    except (TimeoutError, Exception):
-        redis_ok = False
-
-    try:
-        celery_ok = await asyncio.wait_for(celery_task, timeout=0.2)
-    except (TimeoutError, Exception):
-        celery_ok = False
-
+    db_ok, redis_ok, celery_ok = await asyncio.gather(
+        check(check_db()), check(check_redis()), check(check_celery())
+    )
     status_code = (
         status.HTTP_200_OK
         if (db_ok and redis_ok and celery_ok)

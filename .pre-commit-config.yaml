@@ -37,7 +37,7 @@ repos:
     hooks:
       - id: pytest
         name: pytest
-        entry: uv run pytest
+        entry: make test
         language: system
         pass_filenames: false
 
@@ -46,7 +46,7 @@ repos:
     hooks:
       - id: bandit
         name: bandit
-        entry: uv run bandit -r app
+        entry: make security-check
         language: system
         pass_filenames: false
 
@@ -54,6 +54,6 @@ repos:
     hooks:
       - id: pip-audit
         name: pip-audit
-        entry: uv run pip-audit
+        entry: make audit
         language: system
         pass_filenames: false

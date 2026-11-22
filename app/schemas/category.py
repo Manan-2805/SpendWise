@@ -1,24 +1,27 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+
+from app.schemas.common import require_value
 
 CategoryName = Annotated[
     str, Field(min_length=1, max_length=100, description="Category name")
 ]
 
 
+CategoryColor = Annotated[str, Field(pattern=r"^#[0-9A-Fa-f]{6}$")]
+
+
 class CategoryBase(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     name: CategoryName
     description: str | None = Field(default=None, max_length=500)
     icon: str | None = Field(
         default=None, max_length=50, description="Icon identifier or emoji"
     )
-    color: str | None = Field(
-        default=None,
-        pattern=r"^#[0-9A-Fa-f]{6}$",
-        description="Hex color code e.g. '#FF5733'",
-    )
+    color: CategoryColor | None = None
     type: Literal["income", "expense", "both"]
 
 
@@ -31,11 +34,15 @@ class CategoryCreate(CategoryBase):
 class CategoryUpdate(BaseModel):
     """PATCH /categories/{id} — all optional."""
 
-    name: CategoryName | None = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: Annotated[CategoryName | None, AfterValidator(require_value)] = None
     description: str | None = None
     icon: str | None = None
-    color: str | None = None
-    type: Literal["income", "expense", "both"] | None = None
+    color: CategoryColor | None = None
+    type: Annotated[
+        Literal["income", "expense", "both"] | None, AfterValidator(require_value)
+    ] = None
 
 
 class CategoryResponse(CategoryBase):
@@ -44,6 +51,7 @@ class CategoryResponse(CategoryBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    user_id: int
+    color: str | None = None
+    user_id: int | None
     created_at: datetime
     updated_at: datetime

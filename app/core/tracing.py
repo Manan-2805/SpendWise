@@ -8,10 +8,13 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.core.config import settings
+
 
 def setup_tracing(app: FastAPI, engine: AsyncEngine) -> None:
     provider = TracerProvider()
-    provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+    if settings.TRACING_CONSOLE:
+        provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
     trace.set_tracer_provider(provider)
 
     FastAPIInstrumentor.instrument_app(app)

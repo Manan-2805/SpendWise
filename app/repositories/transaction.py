@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Literal
 
-from sqlalchemy import and_, extract, func, select
+from sqlalchemy import and_, extract, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -19,7 +19,17 @@ class TransactionRepository(BaseRepository[Transaction]):
         """Get a transaction by ID with its category eagerly loaded, verifying ownership."""
         stmt = (
             select(Transaction)
-            .options(joinedload(Transaction.category))
+            .options(
+                joinedload(
+                    Transaction.category.and_(
+                        or_(
+                            Category.user_id == user_id,
+                            and_(Category.is_system, Category.user_id.is_(None)),
+                        ),
+                        Category.deleted_at.is_(None),
+                    )
+                )
+            )
             .where(
                 Transaction.id == id,
                 Transaction.user_id == user_id,
@@ -64,7 +74,9 @@ class TransactionRepository(BaseRepository[Transaction]):
         if max_amount is not None:
             conditions.append(Transaction.amount <= max_amount)
         if search:
-            conditions.append(Transaction.description.ilike(f"%{search}%"))
+            conditions.append(
+                Transaction.description.icontains(search, autoescape=True)
+            )
 
         count_stmt = select(func.count(Transaction.id)).where(and_(*conditions))
         total_count = await self.session.scalar(count_stmt) or 0
@@ -81,9 +93,9 @@ class TransactionRepository(BaseRepository[Transaction]):
         sort_column = allowed_sort_fields.get(sort_by, Transaction.transaction_date)
 
         if sort_order == "desc":
-            stmt = stmt.order_by(sort_column.desc())
+            stmt = stmt.order_by(sort_column.desc(), Transaction.id.desc())
         else:
-            stmt = stmt.order_by(sort_column.asc())
+            stmt = stmt.order_by(sort_column.asc(), Transaction.id.asc())
 
         stmt = stmt.offset(skip).limit(limit)
         result = await self.session.execute(stmt)
@@ -144,7 +156,17 @@ class TransactionRepository(BaseRepository[Transaction]):
                     * 100
                 ).label("percentage"),
             )
-            .join(Category, Transaction.category_id == Category.id)
+            .outerjoin(
+                Category,
+                and_(
+                    Transaction.category_id == Category.id,
+                    Category.deleted_at.is_(None),
+                    or_(
+                        Category.user_id == user_id,
+                        and_(Category.is_system, Category.user_id.is_(None)),
+                    ),
+                ),
+            )
             .where(
                 and_(
                     Transaction.user_id == user_id,
@@ -167,7 +189,7 @@ class TransactionRepository(BaseRepository[Transaction]):
         return [
             {
                 "category_id": row.category_id,
-                "category_name": row.category_name,
+                "category_name": row.category_name or "Uncategorized",
                 "category_color": row.category_color,
                 "category_icon": row.category_icon,
                 "total": row.total,

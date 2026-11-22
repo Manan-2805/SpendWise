@@ -6,9 +6,10 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     ForeignKey,
+    Index,
     String,
     Text,
-    UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,7 +24,21 @@ class Category(Base, TimestampMixin, SoftDeleteMixin):
     __tablename__: str = "categories"
 
     __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uq_category_user_name"),
+        Index(
+            "uq_categories_active_owner_name",
+            "user_id",
+            text("lower(name)"),
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL AND user_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_categories_active_system_name",
+            text("lower(name)"),
+            unique=True,
+            postgresql_where=text(
+                "deleted_at IS NULL AND is_system AND user_id IS NULL"
+            ),
+        ),
         CheckConstraint(
             "type IN ('income', 'expense', 'both')", name="ck_category_type"
         ),
@@ -66,6 +81,10 @@ class Category(Base, TimestampMixin, SoftDeleteMixin):
         cascade="save-update, merge",
         lazy="noload",
     )
+
+    @property
+    def is_shared(self) -> bool:
+        return bool(self.is_system and self.user_id is None)
 
     def __repr__(self) -> str:
         return f"Category(id={self.id!r}, name={self.name!r}, user_id={self.user_id!r})"

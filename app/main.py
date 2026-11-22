@@ -11,6 +11,8 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.v1.router import api_v1_router
 from app.core.config import settings
@@ -18,6 +20,7 @@ from app.core.exceptions import SpendWiseError
 from app.core.logging import configure_logging
 from app.core.rate_limit import custom_rate_limit_handler, limiter
 from app.core.redis import close_redis, ping_redis
+from app.core.security import clear_auth_cookies
 from app.core.tracing import setup_tracing
 from app.db.session import AsyncSessionLocal, engine
 from app.middleware.correlation import CorrelationIDMiddleware
@@ -42,7 +45,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
     except Exception as e:
-        logger.critical("database_connection_failed", error=str(e))
+        logger.critical("database_connection_failed", error_type=type(e).__name__)
         raise
 
     redis_ok = await ping_redis()
@@ -95,6 +98,12 @@ def create_application() -> FastAPI:
         max_age=600,
     )
 
+    if settings.TRUSTED_HOSTS:
+        application.add_middleware(
+            TrustedHostMiddleware,
+            allowed_hosts=[*settings.TRUSTED_HOSTS, "localhost", "127.0.0.1"],
+        )
+
     # Rate Limiting configuration
     application.state.limiter = limiter
     application.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)  # type: ignore[arg-type]
@@ -122,7 +131,7 @@ def create_application() -> FastAPI:
     async def spendwise_exception_handler(
         request: Request, exc: SpendWiseError
     ) -> JSONResponse:
-        return JSONResponse(
+        response = JSONResponse(
             status_code=exc.status_code,
             content={
                 "detail": exc.message,
@@ -130,6 +139,9 @@ def create_application() -> FastAPI:
                 "request_id": getattr(request.state, "correlation_id", None),
             },
         )
+        if getattr(request.state, "clear_auth_cookies", False):
+            clear_auth_cookies(response)
+        return response
 
     @application.exception_handler(RequestValidationError)
     async def validation_exception_handler(
@@ -146,7 +158,7 @@ def create_application() -> FastAPI:
                 }
             )
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={
                 "detail": "Request validation failed",
                 "code": "VALIDATION_ERROR",
@@ -154,15 +166,29 @@ def create_application() -> FastAPI:
             },
         )
 
+    @application.exception_handler(IntegrityError)
+    async def integrity_exception_handler(
+        _: Request, exc: IntegrityError
+    ) -> JSONResponse:
+        unique_conflict = getattr(exc.orig, "sqlstate", None) == "23505"
+        return JSONResponse(
+            status_code=409 if unique_conflict else 422,
+            content={
+                "detail": "The change conflicts with stored data",
+                "code": "CONFLICT",
+            },
+        )
+
     @application.exception_handler(Exception)
     async def unhandled_exception_handler(
-        request: Request, _: Exception
+        request: Request, exc: Exception
     ) -> JSONResponse:
-        logger.exception(
+        logger.error(
             "unhandled_exception",
             path=str(request.url.path),
             method=request.method,
-            exc_info=True,
+            error_type=type(exc).__name__,
+            request_id=getattr(request.state, "correlation_id", None),
         )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

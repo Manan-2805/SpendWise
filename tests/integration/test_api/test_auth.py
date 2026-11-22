@@ -1,9 +1,12 @@
+from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import hash_password
+from app.core.security import hash_password, hash_refresh_token, verify_token
 from app.models.auth import RefreshToken
 from app.models.user import User
 
@@ -150,8 +153,12 @@ async def test_refresh_token_reuse_revokes_family(
     assert response2.json()["code"] == "INVALID_TOKEN"
 
     # Verify that all refresh tokens for this family/user are now revoked/deleted
-    result = await db_session.execute(select(RefreshToken))
+    user_id = int(verify_token(first_refresh_cookie, "refresh")["sub"])
+    result = await db_session.execute(
+        select(RefreshToken).where(RefreshToken.user_id == user_id)
+    )
     tokens = result.scalars().all()
+    assert len(tokens) == 2
     # Any active token for this user should be gone or marked revoked
     for tok in tokens:
         assert tok.revoked_at is not None
@@ -207,7 +214,7 @@ async def test_change_password(client: AsyncClient) -> None:
 
 
 async def test_forgot_and_reset_password(
-    client: AsyncClient, db_session: AsyncSession
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Create user
     hashed = hash_password("Password123!")
@@ -221,15 +228,19 @@ async def test_forgot_and_reset_password(
     db_session.add(user)
     await db_session.flush()
 
+    enqueue = MagicMock()
+    monkeypatch.setattr(
+        "app.worker.tasks.send_password_reset_email.apply_async", enqueue
+    )
     # Request forgot password
     forgot_payload = {"email": "test_reset@example.com"}
     forgot_resp = await client.post("/api/v1/auth/forgot-password", json=forgot_payload)
     assert forgot_resp.status_code == 200
 
-    # Retrieve reset token from DB
+    # The broker receives the token and the database retains only its digest.
     await db_session.refresh(user)
-    reset_token = user.reset_password_token
-    assert reset_token is not None
+    reset_token = enqueue.call_args.kwargs["args"][1]
+    assert user.reset_password_token == hash_refresh_token(reset_token)
 
     # Reset password
     reset_payload = {
@@ -258,7 +269,8 @@ async def test_verify_email(client: AsyncClient, db_session: AsyncSession) -> No
         hashed_password=hashed,
         is_active=True,
         is_verified=False,
-        verification_token="some_verification_token",
+        verification_token=hash_refresh_token("some_verification_token"),
+        verification_token_expires_at=datetime.now(UTC) + timedelta(hours=1),
     )
     db_session.add(user)
     await db_session.flush()

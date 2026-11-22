@@ -23,7 +23,7 @@ def verify_password(plain_text: str, hashed: str) -> bool:
 
 
 def create_access_token(
-    subject: int | str, expires_delta: timedelta | None = None
+    subject: int | str, expires_delta: timedelta | None = None, *, auth_version: int = 0
 ) -> str:
     jti = str(uuid.uuid4())
     if expires_delta:
@@ -39,6 +39,7 @@ def create_access_token(
         "sub": str(subject),
         "jti": jti,
         "type": "access",
+        "auth_version": auth_version,
     }
 
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
@@ -95,13 +96,19 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str) 
         secure=secure,
         samesite="lax",
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-        path="/api/v1/auth/refresh",
+        path=f"{settings.API_V1_PREFIX}/auth/refresh",
     )
 
 
 def clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie(key="access_token", path="/")
-    response.delete_cookie(key="refresh_token", path="/api/v1/auth/refresh")
+    secure = settings.ENVIRONMENT != "development"
+    response.delete_cookie(key="access_token", path="/", secure=secure, httponly=True)
+    response.delete_cookie(
+        key="refresh_token",
+        path=f"{settings.API_V1_PREFIX}/auth/refresh",
+        secure=secure,
+        httponly=True,
+    )
 
 
 def hash_refresh_token(token: str) -> str:

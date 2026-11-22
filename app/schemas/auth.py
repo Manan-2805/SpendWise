@@ -1,13 +1,46 @@
 import re
+from typing import Annotated
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+
+def bcrypt_length(password: str) -> str:
+    if len(password.encode("utf-8")) > 72:
+        raise ValueError("Password exceeds 72 UTF-8 bytes")
+    return password
+
+
+def strong_password(password: str) -> str:
+    if not re.search(r"[A-Z]", password):
+        raise ValueError("Password must contain at least one uppercase letter")
+    if not re.search(r"[a-z]", password):
+        raise ValueError("Password must contain at least one lowercase letter")
+    if not re.search(r"\d", password):
+        raise ValueError("Password must contain at least one digit")
+    return password
+
+
+Password = Annotated[str, Field(min_length=1), AfterValidator(bcrypt_length)]
+NewPassword = Annotated[
+    str,
+    Field(min_length=8),
+    AfterValidator(bcrypt_length),
+    AfterValidator(strong_password),
+]
 
 
 class LoginRequest(BaseModel):
     """POST /auth/login request body."""
 
     email: EmailStr
-    password: str = Field(min_length=1)
+    password: Password
 
 
 class RegisterRequest(BaseModel):
@@ -15,28 +48,13 @@ class RegisterRequest(BaseModel):
 
     email: EmailStr
     username: str = Field(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$")
-    password: str = Field(min_length=8, max_length=128)
+    password: NewPassword
     confirm_password: str
 
     @field_validator("username")
     @classmethod
     def username_lowercase(cls, v: str) -> str:
         return v.lower()
-
-    @field_validator("password")
-    @classmethod
-    def password_strength(cls, v: str) -> str:
-        """
-        Enforce password complexity.
-        Must contain at least: one uppercase, one lowercase, one digit.
-        """
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one digit")
-        return v
 
     @model_validator(mode="after")
     def passwords_match(self) -> "RegisterRequest":
@@ -62,20 +80,9 @@ class RefreshRequest(BaseModel):
 class PasswordChangeRequest(BaseModel):
     """POST /users/me/password request body."""
 
-    current_password: str = Field(min_length=1)
-    new_password: str = Field(min_length=8, max_length=128)
+    current_password: Password
+    new_password: NewPassword
     confirm_new_password: str
-
-    @field_validator("new_password")
-    @classmethod
-    def password_strength(cls, v: str) -> str:
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one digit")
-        return v
 
     @model_validator(mode="after")
     def passwords_match(self) -> "PasswordChangeRequest":
@@ -94,7 +101,7 @@ class ResetPasswordRequest(BaseModel):
     """POST /auth/reset-password request body."""
 
     token: str
-    new_password: str = Field(min_length=8, max_length=128)
+    new_password: NewPassword
     confirm_new_password: str
 
     @model_validator(mode="after")

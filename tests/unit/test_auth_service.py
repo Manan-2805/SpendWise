@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
     InactiveUserError,
@@ -9,6 +10,7 @@ from app.core.exceptions import (
     InvalidTokenError,
 )
 from app.core.security import hash_password
+from app.db.session import run_after_commit
 from app.models.auth import RefreshToken
 from app.models.user import User
 from app.schemas.auth import RegisterRequest
@@ -17,7 +19,8 @@ from app.services.auth import AuthService
 
 @pytest.mark.asyncio
 async def test_register_delegates_to_user_service() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
 
@@ -38,10 +41,14 @@ async def test_register_delegates_to_user_service() -> None:
 
 @pytest.mark.asyncio
 async def test_authenticate_success() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
     service.auth_repo = MagicMock()
+    service.auth_repo.lock_active_user = AsyncMock(
+        return_value=User(id=1, is_active=True)
+    )
     service.audit_service = MagicMock()
 
     hashed = hash_password("Password123!")
@@ -53,6 +60,7 @@ async def test_authenticate_success() -> None:
         is_active=True,
     )
     service.user_service.repo.get_by_email = AsyncMock(return_value=mock_user)
+    service.auth_repo.lock_active_user.return_value = mock_user
     service.auth_repo.create_refresh_token = AsyncMock()
     service.audit_service.log_action = AsyncMock()
 
@@ -83,7 +91,8 @@ async def test_authenticate_success() -> None:
 
 @pytest.mark.asyncio
 async def test_authenticate_invalid_credentials() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
     service.audit_service = MagicMock()
@@ -99,7 +108,8 @@ async def test_authenticate_invalid_credentials() -> None:
 
 @pytest.mark.asyncio
 async def test_authenticate_inactive_user() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
     service.audit_service = MagicMock()
@@ -121,9 +131,13 @@ async def test_authenticate_inactive_user() -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_tokens_success() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.auth_repo = MagicMock()
+    service.auth_repo.lock_active_user = AsyncMock(
+        return_value=User(id=1, is_active=True)
+    )
     service.audit_service = MagicMock()
 
     import app.services.auth as auth_mod
@@ -157,9 +171,13 @@ async def test_refresh_tokens_success() -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_token_reuse_detected() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.auth_repo = MagicMock()
+    service.auth_repo.lock_active_user = AsyncMock(
+        return_value=User(id=1, is_active=True)
+    )
     service.audit_service = MagicMock()
 
     import app.services.auth as auth_mod
@@ -193,9 +211,13 @@ async def test_refresh_token_reuse_detected() -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_tokens_expired() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.auth_repo = MagicMock()
+    service.auth_repo.lock_active_user = AsyncMock(
+        return_value=User(id=1, is_active=True)
+    )
 
     import app.services.auth as auth_mod
 
@@ -223,9 +245,13 @@ async def test_refresh_tokens_expired() -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_tokens_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.auth_repo = MagicMock()
+    service.auth_repo.lock_active_user = AsyncMock(
+        return_value=User(id=1, is_active=True)
+    )
 
     import app.services.auth as auth_mod
 
@@ -244,7 +270,8 @@ async def test_refresh_tokens_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_tokens_decode_error() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
 
     import app.services.auth as auth_mod
@@ -261,37 +288,46 @@ async def test_refresh_tokens_decode_error() -> None:
 
 @pytest.mark.asyncio
 async def test_revoke_user_tokens() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.auth_repo = MagicMock()
+    service.auth_repo.lock_active_user = AsyncMock(
+        return_value=User(id=1, is_active=True)
+    )
     service.audit_service = MagicMock()
 
-    service.auth_repo.revoke_all_for_user = AsyncMock()
+    service.auth_repo.invalidate_sessions = AsyncMock()
     service.audit_service.log_action = AsyncMock()
 
     await service.revoke_user_tokens(1)
-    service.auth_repo.revoke_all_for_user.assert_called_once_with(1)
+    service.auth_repo.invalidate_sessions.assert_called_once_with(1)
     service.audit_service.log_action.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_change_password() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
     service.auth_repo = MagicMock()
+    service.auth_repo.lock_active_user = AsyncMock(
+        return_value=User(id=1, is_active=True)
+    )
 
     service.user_service.change_password = AsyncMock()
-    service.auth_repo.revoke_all_for_user = AsyncMock()
+    service.auth_repo.invalidate_sessions = AsyncMock()
 
     await service.change_password(1, "old", "new")
     service.user_service.change_password.assert_called_once_with(1, "old", "new")
-    service.auth_repo.revoke_all_for_user.assert_called_once_with(1)
+    service.auth_repo.invalidate_sessions.assert_called_once_with(1)
 
 
 @pytest.mark.asyncio
 async def test_forgot_password_success() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
     service.audit_service = MagicMock()
@@ -301,16 +337,21 @@ async def test_forgot_password_success() -> None:
     service.user_service.repo.update = AsyncMock()
     service.audit_service.log_action = AsyncMock()
 
-    with patch("app.worker.tasks.send_password_reset_email.delay") as mock_reset_task:
+    with patch(
+        "app.worker.tasks.send_password_reset_email.apply_async"
+    ) as mock_reset_task:
         await service.forgot_password("test@test.com")
         service.user_service.repo.update.assert_called_once()
+        mock_reset_task.assert_not_called()
+        await run_after_commit(db)
         mock_reset_task.assert_called_once()
         service.audit_service.log_action.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_forgot_password_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
 
@@ -320,10 +361,14 @@ async def test_forgot_password_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_reset_password_success() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
     service.auth_repo = MagicMock()
+    service.auth_repo.lock_active_user = AsyncMock(
+        return_value=User(id=1, is_active=True)
+    )
     service.audit_service = MagicMock()
 
     mock_user = User(
@@ -331,18 +376,19 @@ async def test_reset_password_success() -> None:
     )
     service.user_service.repo.get_by_reset_token = AsyncMock(return_value=mock_user)
     service.user_service.repo.update = AsyncMock()
-    service.auth_repo.revoke_all_for_user = AsyncMock()
+    service.auth_repo.invalidate_sessions = AsyncMock()
     service.audit_service.log_action = AsyncMock()
 
     await service.reset_password("token", "new_password")
     service.user_service.repo.update.assert_called_once()
-    service.auth_repo.revoke_all_for_user.assert_called_once_with(1)
+    service.auth_repo.invalidate_sessions.assert_called_once_with(1)
     service.audit_service.log_action.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_reset_password_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
 
@@ -353,7 +399,8 @@ async def test_reset_password_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_reset_password_expired() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
 
@@ -367,12 +414,15 @@ async def test_reset_password_expired() -> None:
 
 @pytest.mark.asyncio
 async def test_verify_email_success() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
     service.audit_service = MagicMock()
 
-    mock_user = User(id=1)
+    mock_user = User(
+        id=1, verification_token_expires_at=datetime.now(UTC) + timedelta(hours=1)
+    )
     service.user_service.repo.get_by_verification_token = AsyncMock(
         return_value=mock_user
     )
@@ -386,7 +436,8 @@ async def test_verify_email_success() -> None:
 
 @pytest.mark.asyncio
 async def test_verify_email_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
 
@@ -397,7 +448,8 @@ async def test_verify_email_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_resend_verification_unverified() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
 
@@ -407,14 +459,19 @@ async def test_resend_verification_unverified() -> None:
     service.user_service.repo.get_by_email = AsyncMock(return_value=mock_user)
     service.user_service.repo.update = AsyncMock()
 
-    with patch("app.worker.tasks.send_verification_email.delay") as mock_verify_task:
+    with patch(
+        "app.worker.tasks.send_verification_email.apply_async"
+    ) as mock_verify_task:
         await service.resend_verification("test@test.com")
+        mock_verify_task.assert_not_called()
+        await run_after_commit(db)
         mock_verify_task.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_resend_verification_verified() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.user_service = MagicMock()
 
@@ -426,9 +483,13 @@ async def test_resend_verification_verified() -> None:
 
 @pytest.mark.asyncio
 async def test_login_or_register_oauth_success_link() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.auth_repo = MagicMock()
+    service.auth_repo.lock_active_user = AsyncMock(
+        return_value=User(id=1, is_active=True)
+    )
     service.user_service = MagicMock()
     service.audit_service = MagicMock()
 
@@ -457,9 +518,13 @@ async def test_login_or_register_oauth_success_link() -> None:
 
 @pytest.mark.asyncio
 async def test_login_or_register_oauth_success_create() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.auth_repo = MagicMock()
+    service.auth_repo.lock_active_user = AsyncMock(
+        return_value=User(id=1, is_active=True)
+    )
     service.user_service = MagicMock()
     service.audit_service = MagicMock()
 
@@ -491,9 +556,13 @@ async def test_login_or_register_oauth_success_create() -> None:
 
 @pytest.mark.asyncio
 async def test_login_or_register_oauth_username_collision() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.auth_repo = MagicMock()
+    service.auth_repo.lock_active_user = AsyncMock(
+        return_value=User(id=1, is_active=True)
+    )
     service.user_service = MagicMock()
     service.audit_service = MagicMock()
 
@@ -528,9 +597,13 @@ async def test_login_or_register_oauth_username_collision() -> None:
 
 @pytest.mark.asyncio
 async def test_login_or_register_oauth_inactive() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
+    db.info = {}
     service = AuthService(db)
     service.auth_repo = MagicMock()
+    service.auth_repo.lock_active_user = AsyncMock(
+        return_value=User(id=1, is_active=True)
+    )
     service.user_service = MagicMock()
 
     mock_user = User(id=1, is_active=False)

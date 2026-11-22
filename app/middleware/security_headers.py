@@ -32,6 +32,15 @@ class SecurityHeadersMiddleware:
                     b"permissions-policy": b"geolocation=(), microphone=(), camera=()",
                 }
 
+                path = scope.get("path", "")
+                if settings.DEBUG and path in {"/docs", "/redoc"}:
+                    header_keys_to_set[b"content-security-policy"] = (
+                        b"default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                        b"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+                        b"font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://fastapi.tiangolo.com; "
+                        b"worker-src 'self' blob:"
+                    )
+
                 if settings.ENVIRONMENT == "production":
                     header_keys_to_set[b"strict-transport-security"] = (
                         b"max-age=31536000; includeSubDomains"
@@ -46,8 +55,8 @@ class SecurityHeadersMiddleware:
                     new_headers.append((k, v))
 
                 # Inject Cache-Control for Auth endpoints as per requirements
-                path = scope.get("path", "")
-                if path.startswith("/api/v1/auth"):
+                auth_path = f"{settings.API_V1_PREFIX}/auth"
+                if path == auth_path or path.startswith(f"{auth_path}/"):
                     new_headers = [
                         (k, v) for k, v in new_headers if k.lower() != b"cache-control"
                     ]

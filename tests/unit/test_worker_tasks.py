@@ -24,7 +24,7 @@ async def test_send_verification_email_success() -> None:
     mock_session_local.return_value.__aenter__.return_value = mock_session
 
     with patch("app.worker.tasks.AsyncSessionLocal", mock_session_local):
-        send_verification_email(1)
+        send_verification_email(1, "verification-example")
         mock_session.get.assert_called_once_with(User, 1)
 
 
@@ -37,7 +37,7 @@ async def test_send_verification_email_user_not_found() -> None:
     mock_session_local.return_value.__aenter__.return_value = mock_session
 
     with patch("app.worker.tasks.AsyncSessionLocal", mock_session_local):
-        send_verification_email(99)
+        send_verification_email(99, "verification-example")
         mock_session.get.assert_called_once_with(User, 99)
 
 
@@ -105,7 +105,8 @@ async def test_export_audit_logs() -> None:
         patch("app.worker.tasks.AsyncSessionLocal", mock_session_local),
         patch("app.repositories.audit.AuditRepository", return_value=mock_repo),
     ):
-        export_audit_logs(1)
+        csv = export_audit_logs(1)
+        assert csv.splitlines() == ["id,action,resource_type,resource_id,created_at"]
         mock_repo.get_for_user.assert_called_once_with(1)
 
 
@@ -125,3 +126,31 @@ async def test_generate_monthly_reports_for_all_users() -> None:
     ):
         generate_monthly_reports_for_all_users()
         assert mock_delay.call_count == 3
+
+
+async def test_verification_worker_delivers_current_token() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.core.security import hash_refresh_token
+
+    token = "verification-example"
+    user = User(
+        id=1,
+        email="test@example.com",
+        is_active=True,
+        verification_token=hash_refresh_token(token),
+        verification_token_expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    session = AsyncMock()
+    session.get.return_value = user
+    session_factory = MagicMock()
+    session_factory.return_value.__aenter__.return_value = session
+
+    with (
+        patch("app.worker.tasks.AsyncSessionLocal", session_factory),
+        patch("app.worker.tasks._send_email") as deliver,
+    ):
+        send_verification_email(user.id, token)
+        deliver.assert_called_once_with(
+            user.email, "Verify your SpendWise email", "verify-email", token
+        )

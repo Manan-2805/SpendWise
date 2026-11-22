@@ -48,3 +48,13 @@ def test_configure_logging() -> None:
     # Test both debug=True and debug=False
     configure_logging(debug=True)
     configure_logging(debug=False)
+
+
+def test_production_logging_preserves_json_renderer() -> None:
+    import structlog
+
+    configure_logging(debug=False)
+
+    assert isinstance(
+        structlog.get_config()["processors"][-1], structlog.processors.JSONRenderer
+    )

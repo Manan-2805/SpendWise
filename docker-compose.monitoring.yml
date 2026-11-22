@@ -1,36 +1,28 @@
-version: "3.8"
-
 services:
   prometheus:
-    image: prom/prometheus:latest
-    container_name: spendwise_prometheus
+    image: prom/prometheus:v3.5.0
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
-      - ./docker/prometheus:/etc/prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - spendwise_monitoring
+      - ./docker/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    depends_on:
+      - api
 
   grafana:
-    image: grafana/grafana:latest
-    container_name: spendwise_grafana
+    image: grafana/grafana:12.3.0
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set a unique Grafana admin password}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
     volumes:
-      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
-    networks:
-      - spendwise_monitoring
 
-networks:
-  spendwise_monitoring:
-    driver: bridge
+volumes:
+  prometheus_data:
+  grafana_data:

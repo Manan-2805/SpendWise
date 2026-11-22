@@ -15,10 +15,10 @@ import asyncio
 import random
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any
 
 from sqlalchemy import insert, select
 
+from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import AsyncSessionLocal
 from app.models.category import Category
@@ -27,6 +27,9 @@ from app.models.user import User
 
 
 async def seed_volume() -> None:
+    if settings.ENVIRONMENT != "development":
+        raise RuntimeError("Seeding is available only in development mode")
+
     print("--- Starting Load Test Database Seeding ---")
 
     # 1. Pre-calculate password hash to save substantial execution time

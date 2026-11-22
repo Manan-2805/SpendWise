@@ -4,13 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, require_cookie_origin
 from app.core.auth import oauth
 from app.core.config import settings
 from app.core.exceptions import (
-    EmailAlreadyRegisteredError,
-    InactiveUserError,
-    InvalidCredentialsError,
     InvalidTokenError,
 )
 from app.core.rate_limit import limiter
@@ -34,67 +31,57 @@ router = APIRouter()
 @router.post(
     "/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED
 )
-@limiter.limit("3/minute")
+@limiter.limit(settings.RATE_LIMIT_REGISTER)
 async def register(
     request: Request,
     response: Response,
     data: RegisterRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> TokenResponse:
     """Register a new user, issue tokens, set HttpOnly cookies, and queue verification email."""
     auth_service = AuthService(db)
-    try:
-        user = await auth_service.register(data)
+    user = await auth_service.register(data)
 
-        ip_address = request.client.host if request.client else None
-        user_agent = request.headers.get("User-Agent")
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("User-Agent")
 
-        access_token, refresh_token, _ = await auth_service.authenticate(
-            data.email, data.password, ip_address=ip_address, user_agent=user_agent
-        )
+    access_token, refresh_token, _ = await auth_service.authenticate(
+        data.email, data.password, ip_address=ip_address, user_agent=user_agent
+    )
 
-        await auth_service.resend_verification(user.email)
+    await auth_service.resend_verification(user.email)
 
-        set_auth_cookies(response, access_token, refresh_token)
-        return TokenResponse(
-            access_token=access_token,
-            token_type="bearer",  # nosec B106
-            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        )
-    except EmailAlreadyRegisteredError as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    set_auth_cookies(response, access_token, refresh_token)
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",  # nosec B106
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit("5/minute")
+@limiter.limit(settings.RATE_LIMIT_LOGIN)
 async def login(
     request: Request,
     response: Response,
     data: LoginRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> TokenResponse:
     """Log in with email and password, returning tokens and setting HttpOnly cookies."""
     auth_service = AuthService(db)
-    try:
-        ip_address = request.client.host if request.client else None
-        user_agent = request.headers.get("User-Agent")
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("User-Agent")
 
-        access_token, refresh_token, _ = await auth_service.authenticate(
-            data.email, data.password, ip_address=ip_address, user_agent=user_agent
-        )
+    access_token, refresh_token, _ = await auth_service.authenticate(
+        data.email, data.password, ip_address=ip_address, user_agent=user_agent
+    )
 
-        set_auth_cookies(response, access_token, refresh_token)
-        return TokenResponse(
-            access_token=access_token,
-            token_type="bearer",  # nosec B106
-            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        )
-    except InvalidCredentialsError as e:
-        raise e
-    except InactiveUserError as e:
-        raise e
+    set_auth_cookies(response, access_token, refresh_token)
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",  # nosec B106
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -103,12 +90,12 @@ async def refresh_token(
     request: Request,
     response: Response,
     data: RefreshRequest | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> TokenResponse:
     """Rotate refresh token to obtain a new access/refresh token pair."""
-    token = request.cookies.get("refresh_token")
-    if not token and data:
-        token = data.refresh_token
+    token = data.refresh_token if data else None
+    if not token and (token := request.cookies.get("refresh_token")):
+        require_cookie_origin(request)
 
     if not token:
         raise HTTPException(
@@ -130,16 +117,16 @@ async def refresh_token(
             token_type="bearer",  # nosec B106
             expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )
-    except InvalidTokenError as e:
-        clear_auth_cookies(response)
-        raise e
+    except InvalidTokenError:
+        request.state.clear_auth_cookies = True
+        raise
 
 
 @router.post("/logout")
 async def logout(
     response: Response,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> dict[str, str]:
     """Revoke all active tokens for the user and clear HttpOnly cookies."""
     auth_service = AuthService(db)
@@ -163,18 +150,15 @@ async def change_password(
     response: Response,
     data: PasswordChangeRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> dict[str, str]:
     """Change user password, revoke all sessions, and clear cookies."""
     auth_service = AuthService(db)
-    try:
-        await auth_service.change_password(
-            current_user.id, data.current_password, data.new_password
-        )
-        clear_auth_cookies(response)
-        return {"message": "Password changed successfully. Please log in again."}
-    except InvalidCredentialsError as e:
-        raise e
+    await auth_service.change_password(
+        current_user.id, data.current_password, data.new_password
+    )
+    clear_auth_cookies(response)
+    return {"message": "Password changed successfully. Please log in again."}
 
 
 @router.post("/forgot-password")
@@ -182,7 +166,7 @@ async def change_password(
 async def forgot_password(
     request: Request,  # noqa: ARG001
     data: ForgotPasswordRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> dict[str, str]:
     """Request a password reset link to be sent to the email."""
     auth_service = AuthService(db)
@@ -197,29 +181,23 @@ async def forgot_password(
 async def reset_password(
     request: Request,  # noqa: ARG001
     data: ResetPasswordRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> dict[str, str]:
     """Reset the password using the provided reset token."""
     auth_service = AuthService(db)
-    try:
-        await auth_service.reset_password(data.token, data.new_password)
-        return {"message": "Password reset successfully. Please log in again."}
-    except InvalidTokenError as e:
-        raise e
+    await auth_service.reset_password(data.token, data.new_password)
+    return {"message": "Password reset successfully. Please log in again."}
 
 
 @router.get("/verify-email")
 async def verify_email(
     token: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> dict[str, str]:
     """Verify email address using the token received in the verification email."""
     auth_service = AuthService(db)
-    try:
-        await auth_service.verify_email(token)
-        return {"message": "Email verified successfully."}
-    except InvalidTokenError as e:
-        raise e
+    await auth_service.verify_email(token)
+    return {"message": "Email verified successfully."}
 
 
 @router.post("/resend-verification")
@@ -227,7 +205,7 @@ async def verify_email(
 async def resend_verification(
     request: Request,  # noqa: ARG001
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> dict[str, str]:
     """Resend email verification link for the current user."""
     auth_service = AuthService(db)
@@ -253,7 +231,7 @@ async def google_login(
 async def google_callback(
     request: Request,
     response: Response,  # noqa: ARG001
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> Any:
     """Handle callback from Google, authenticating and linking accounts."""
     if not settings.GOOGLE_OAUTH_ENABLED:
@@ -262,7 +240,7 @@ async def google_callback(
         token = await oauth.google.authorize_access_token(request)
     except Exception as e:
         raise HTTPException(
-            status_code=400, detail=f"Google authentication failed: {e}"
+            status_code=400, detail="Google authentication failed"
         ) from e
 
     user_info = token.get("userinfo")

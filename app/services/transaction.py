@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import (
     AccessDeniedError,
     CategoryNotFoundError,
+    ConflictError,
     TransactionNotFoundError,
 )
 from app.models.category import Category
@@ -18,10 +19,12 @@ from app.schemas.transaction import (
     TransactionUpdate,
 )
 from app.services.audit import AuditService
+from app.services.report import mark_report_cache_dirty
 
 
 class TransactionService:
     def __init__(self, db: AsyncSession) -> None:
+        self.db = db
         self.repo = TransactionRepository(db)
         self.category_repo = CategoryRepository(db)
         self.audit_service = AuditService(db)
@@ -59,22 +62,22 @@ class TransactionService:
         )
         return [TransactionResponse.model_validate(t) for t in transactions], total
 
-    async def invalidate_cache(self, user_id: int) -> None:
-        """Invalidate all report cache keys for this user on any mutation."""
-        from app.core.redis import redis_client
-
-        keys = await redis_client.keys(f"spendwise:report:{user_id}:*")
-        if keys:
-            await redis_client.delete(*keys)
+    async def _validate_category(
+        self, category_id: int, user_id: int, tx_type: str
+    ) -> None:
+        category: Category | None = await self.category_repo.get_by_id(category_id)
+        if not category:
+            raise CategoryNotFoundError(category_id)
+        if category.user_id != user_id and not category.is_shared:
+            raise AccessDeniedError("Category does not belong to you")
+        if category.type in {"income", "expense"} and category.type != tx_type:
+            raise ConflictError("Transaction type conflicts with its category")
 
     async def create(
         self, data: TransactionCreate, user_id: int
     ) -> TransactionResponse:
-        category: Category | None = await self.category_repo.get_by_id(data.category_id)
-        if not category:
-            raise CategoryNotFoundError(data.category_id)
-        if category.user_id != user_id and not category.is_system:
-            raise AccessDeniedError("Category does not belong to you")
+        await mark_report_cache_dirty(self.db, user_id)
+        await self._validate_category(data.category_id, user_id, data.type)
 
         transaction: Transaction = await self.repo.create(
             user_id=user_id,
@@ -87,7 +90,6 @@ class TransactionService:
             tags=data.tags,
         )
 
-        await self.invalidate_cache(user_id)
         await self.audit_service.log_action(
             action="TRANSACTION_CREATED",
             resource_type="Transaction",
@@ -104,22 +106,21 @@ class TransactionService:
     async def update(
         self, transaction_id: int, data: TransactionUpdate, user_id: int
     ) -> TransactionResponse:
+        await mark_report_cache_dirty(self.db, user_id)
         existing: Transaction | None = await self.repo.get_by_id(transaction_id)
         if not existing:
             raise TransactionNotFoundError(transaction_id)
         if existing.user_id != user_id:
             raise AccessDeniedError()
 
-        if data.category_id is not None:
-            category: Category | None = await self.category_repo.get_by_id(
-                data.category_id
-            )
-            if not category:
-                raise CategoryNotFoundError(data.category_id)
-            if category.user_id != user_id and not category.is_system:
-                raise AccessDeniedError("Category does not belong to you")
-
         update_data: dict[str, Any] = data.model_dump(exclude_unset=True)
+        category_id = update_data.get("category_id", existing.category_id)
+        if category_id is not None and (
+            "category_id" in update_data or "type" in update_data
+        ):
+            await self._validate_category(
+                category_id, user_id, data.type or existing.type
+            )
 
         old_values = {
             "amount": str(existing.amount),
@@ -131,7 +132,6 @@ class TransactionService:
             transaction_id, **update_data
         )
 
-        await self.invalidate_cache(user_id)
         await self.audit_service.log_action(
             action="TRANSACTION_UPDATED",
             resource_type="Transaction",
@@ -143,6 +143,7 @@ class TransactionService:
         return TransactionResponse.model_validate(updated)
 
     async def soft_delete(self, transaction_id: int, user_id: int) -> None:
+        await mark_report_cache_dirty(self.db, user_id)
         transaction: Transaction | None = await self.repo.get_by_id(transaction_id)
         if not transaction:
             raise TransactionNotFoundError(transaction_id)
@@ -150,7 +151,6 @@ class TransactionService:
             raise AccessDeniedError()
 
         await self.repo.soft_delete(transaction_id)
-        await self.invalidate_cache(user_id)
         await self.audit_service.log_action(
             action="TRANSACTION_DELETED",
             resource_type="Transaction",

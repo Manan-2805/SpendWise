@@ -20,6 +20,7 @@ from app.models.user import User
 @pytest.mark.asyncio
 async def test_get_db_success() -> None:
     mock_session = AsyncMock()
+    mock_session.info = {}
     mock_cm = AsyncMock()
     mock_cm.__aenter__.return_value = mock_session
     mock_cm.__aexit__.return_value = False
@@ -31,12 +32,14 @@ async def test_get_db_success() -> None:
         with suppress(StopAsyncIteration):
             await anext(generator)
 
+        mock_session.commit.assert_awaited_once()
         mock_session.close.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_get_db_exception() -> None:
     mock_session = AsyncMock()
+    mock_session.info = {}
     mock_cm = AsyncMock()
     mock_cm.__aenter__.return_value = mock_session
     mock_cm.__aexit__.return_value = False
@@ -53,6 +56,7 @@ async def test_get_db_exception() -> None:
 @pytest.mark.asyncio
 async def test_get_current_user_no_token() -> None:
     request = MagicMock()
+    request.method = "GET"
     request.cookies = {}
     with pytest.raises(AuthenticationError):
         await get_current_user(request, token_from_header=None, db=MagicMock())
@@ -61,6 +65,7 @@ async def test_get_current_user_no_token() -> None:
 @pytest.mark.asyncio
 async def test_get_current_user_missing_sub() -> None:
     request = MagicMock()
+    request.method = "GET"
     request.cookies = {"access_token": "token"}
     with (
         patch("app.api.deps.verify_token", return_value={}),
@@ -72,6 +77,7 @@ async def test_get_current_user_missing_sub() -> None:
 @pytest.mark.asyncio
 async def test_get_current_user_invalid_token() -> None:
     request = MagicMock()
+    request.method = "GET"
     request.cookies = {"access_token": "token"}
     with (
         patch("app.api.deps.verify_token", side_effect=Exception),
@@ -83,6 +89,7 @@ async def test_get_current_user_invalid_token() -> None:
 @pytest.mark.asyncio
 async def test_get_current_user_not_found() -> None:
     request = MagicMock()
+    request.method = "GET"
     request.cookies = {"access_token": "token"}
     mock_db = AsyncMock()
     execute_result = MagicMock()
@@ -98,6 +105,7 @@ async def test_get_current_user_not_found() -> None:
 @pytest.mark.asyncio
 async def test_get_current_user_success() -> None:
     request = MagicMock()
+    request.method = "GET"
     request.cookies = {}
     mock_db = AsyncMock()
     mock_user = User(id=1, is_active=True)

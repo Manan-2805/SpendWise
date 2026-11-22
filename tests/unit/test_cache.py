@@ -1,64 +1,74 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.core.cache import get_or_set_cache, versioned_key_builder
+from redis.exceptions import RedisError
+
+from app.core.cache import RELEASE_LOCK, get_or_set_cache, versioned_key_builder
 
 
-async def test_get_or_set_cache_branches() -> None:
-    # Test json load failure fallback
-    mock_get = AsyncMock(return_value="invalid-json")
-    with patch("app.core.redis.redis_client.get", mock_get):
-        val = await get_or_set_cache("some-key", AsyncMock(return_value="factory-val"))
-        assert val == "invalid-json"
-
-    # Test lock acquisition failure fallback
-    mock_get_none = AsyncMock(return_value=None)
-    mock_set_false = AsyncMock(return_value=False)
-    with (
-        patch("app.core.redis.redis_client.get", mock_get_none),
-        patch("app.core.redis.redis_client.set", mock_set_false),
+async def test_cache_skips_factory_on_hit() -> None:
+    factory = AsyncMock()
+    with patch(
+        "app.core.redis.redis_client.get", AsyncMock(return_value=json.dumps("hit"))
     ):
-        mock_factory = AsyncMock(return_value="factory-val")
-        val = await get_or_set_cache("some-key", mock_factory)
-        assert val == "factory-val"
-        mock_factory.assert_called_once()
+        assert await get_or_set_cache("some-key", factory) == "hit"
+    factory.assert_not_awaited()
 
-    # Test lock acquired, but cache populated in between
-    # First get returns None, set(lock) returns True, second get returns cached val
-    get_mock = AsyncMock(side_effect=[None, json.dumps("late-cached-val")])
-    mock_set_true = AsyncMock(return_value=True)
-    mock_delete_true = AsyncMock(return_value=True)
-    with (
-        patch("app.core.redis.redis_client.get", get_mock),
-        patch("app.core.redis.redis_client.set", mock_set_true),
-        patch("app.core.redis.redis_client.delete", mock_delete_true),
-    ):
-        mock_factory = AsyncMock()
-        val = await get_or_set_cache("some-key", mock_factory)
-        assert val == "late-cached-val"
-        mock_factory.assert_not_called()
 
-    # Test json loads exception on second get
-    get_mock_exc = AsyncMock(side_effect=[None, "late-invalid-json"])
+async def test_cache_returns_factory_value_during_redis_outage() -> None:
+    factory = AsyncMock(return_value="fresh")
+    with patch("app.core.redis.redis_client.get", AsyncMock(side_effect=RedisError)):
+        assert await get_or_set_cache("some-key", factory) == "fresh"
+    factory.assert_awaited_once()
+
+
+async def test_cache_rechecks_after_acquiring_lock_and_releases_only_its_owner() -> (
+    None
+):
+    factory = AsyncMock()
+    get = AsyncMock(side_effect=[None, json.dumps("late")])
+    set_value = AsyncMock(return_value=True)
+    release = AsyncMock()
     with (
-        patch("app.core.redis.redis_client.get", get_mock_exc),
-        patch("app.core.redis.redis_client.set", mock_set_true),
-        patch("app.core.redis.redis_client.delete", mock_delete_true),
+        patch("app.core.redis.redis_client.get", get),
+        patch("app.core.redis.redis_client.set", set_value),
+        patch("app.core.redis.redis_client.eval", release),
     ):
-        mock_factory = AsyncMock()
-        val = await get_or_set_cache("some-key", mock_factory)
-        assert val == "late-invalid-json"
-        mock_factory.assert_not_called()
+        assert await get_or_set_cache("some-key", factory) == "late"
+    factory.assert_not_awaited()
+    lock, owner = set_value.await_args.args
+    release.assert_awaited_once_with(RELEASE_LOCK, 1, lock, owner)
+
+
+async def test_cache_replaces_invalid_json() -> None:
+    factory = AsyncMock(return_value="fresh")
+    set_value = AsyncMock(return_value=True)
+    with (
+        patch(
+            "app.core.redis.redis_client.get", AsyncMock(return_value="invalid-json")
+        ),
+        patch("app.core.redis.redis_client.set", set_value),
+        patch("app.core.redis.redis_client.eval", AsyncMock()),
+    ):
+        assert await get_or_set_cache("some-key", factory) == "fresh"
+    factory.assert_awaited_once()
+    assert set_value.await_args.args == ("some-key", json.dumps("fresh"))
+
+
+async def test_cache_lock_timeout_falls_back_to_factory() -> None:
+    factory = AsyncMock(return_value="fresh")
+    with (
+        patch("app.core.redis.redis_client.get", AsyncMock(return_value=None)),
+        patch("app.core.redis.redis_client.set", AsyncMock(return_value=False)),
+    ):
+        assert await get_or_set_cache("some-key", factory) == "fresh"
+    factory.assert_awaited_once()
 
 
 def test_versioned_key_builder() -> None:
-    # Test key builder with request that has user and cache_version
-    mock_request = MagicMock()
-    mock_request.state.user.cache_version = 42
-
-    # We mock default_key_builder to return "base-key"
+    request = MagicMock()
+    request.state.user.cache_version = 42
     with patch(
         "fastapi_cache.key_builder.default_key_builder", return_value="base-key"
     ):
-        res = versioned_key_builder(lambda: None, request=mock_request)
-        assert res == "base-key:v42"
+        assert versioned_key_builder(lambda: None, request=request) == "base-key:v42"
