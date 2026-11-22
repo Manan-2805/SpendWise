@@ -1,14 +1,11 @@
 import asyncio
 import os
+import secrets
 from collections.abc import AsyncGenerator, Generator
-from contextlib import suppress
 
 import pytest
-from fastapi_cache import FastAPICache
-from fastapi_cache.backends.inmemory import InMemoryBackend
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
@@ -16,21 +13,24 @@ from sqlalchemy.ext.asyncio import (
 
 # Set test environment variables BEFORE importing app parts
 os.environ["DATABASE_URL"] = (
-    "postgresql://spendwise:spendwise_dev_password@localhost:5432/spendwise_test"
+    "postgresql://spendwise_test:spendwise_test_local@127.0.0.1:"
+    f"{os.getenv('TEST_POSTGRES_PORT', '55432')}/spendwise_test"
 )
-os.environ["REDIS_URL"] = "redis://localhost:6379/1"
-os.environ["SECRET_KEY"] = (
-    "2e8a551d6dd3ae3e4e2c461948784821ff3e4b8e6384747e680ea2569bd88f52"
+os.environ["REDIS_URL"] = f"redis://127.0.0.1:{os.getenv('TEST_REDIS_PORT', '56379')}/0"
+os.environ["CELERY_BROKER_URL"] = (
+    f"redis://127.0.0.1:{os.getenv('TEST_REDIS_PORT', '56379')}/1"
 )
-os.environ["CELERY_BROKER_URL"] = "redis://localhost:6379/1"
-os.environ["CELERY_RESULT_BACKEND"] = "redis://localhost:6379/1"
+os.environ["CELERY_RESULT_BACKEND"] = (
+    f"redis://127.0.0.1:{os.getenv('TEST_REDIS_PORT', '56379')}/2"
+)
+os.environ["SECRET_KEY"] = secrets.token_hex(32)
 os.environ["ENVIRONMENT"] = "development"
+os.environ["DEBUG"] = "false"
+os.environ["SMTP_HOST"] = ""
 
 import app.models
-from app.api.deps import get_db
 from app.core.config import settings
 from app.core.security import create_access_token
-from app.db.base import Base
 from app.main import app as fastapi_app
 from app.worker.celery_app import celery_app
 from tests.factories.category import CategoryFactory
@@ -40,7 +40,7 @@ from tests.factories.user import UserFactory
 celery_app.conf.task_always_eager = True
 
 # Create test engine and sessionmaker
-test_engine: AsyncEngine = create_async_engine(
+test_engine = create_async_engine(
     settings.ASYNC_DATABASE_URL,
     echo=False,
 )
@@ -58,59 +58,6 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
-
-
-@pytest.fixture(scope="session", autouse=True)
-def setup_cache() -> Generator[None, None, None]:
-    FastAPICache.init(InMemoryBackend())
-    yield
-
-
-@pytest.fixture(scope="session", autouse=True)
-async def setup_test_db() -> AsyncGenerator[None, None]:
-    # Set up tables
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    # Clean up tables
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-
-
-@pytest.fixture(scope="function", autouse=True)
-async def clear_redis() -> AsyncGenerator[None, None]:
-    from app.core.redis import redis_client
-
-    with suppress(Exception):
-        await redis_client.flushdb()
-
-    yield
-
-
-@pytest.fixture(scope="function")
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    async with TestAsyncSessionLocal() as session:
-        await session.begin()
-
-        async def mock_commit() -> None:
-            await session.flush()
-
-        session.commit = mock_commit  # type: ignore[method-assign]
-
-        yield session
-
-        await session.rollback()
-
-
-@pytest.fixture(scope="function", autouse=True)
-async def override_get_db(db_session: AsyncSession) -> AsyncGenerator[None, None]:
-    async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
-        yield db_session
-
-    fastapi_app.dependency_overrides[get_db] = _override_get_db
-    yield
-    fastapi_app.dependency_overrides.clear()
 
 
 @pytest.fixture(scope="function")

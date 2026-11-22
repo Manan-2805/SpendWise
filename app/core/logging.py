@@ -103,8 +103,8 @@ def configure_logging(debug: bool = False) -> None:
         processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(log_level),
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
-        cache_logger_on_first_use=True,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=False,
     )
 
     logging.basicConfig(
@@ -113,8 +113,6 @@ def configure_logging(debug: bool = False) -> None:
         level=log_level,
         force=True,
     )
-
-    structlog.stdlib.recreate_defaults()
 
     if not debug:
         logging.getLogger("uvicorn.access").setLevel(logging.WARNING)

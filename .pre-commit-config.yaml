@@ -1,4 +1,10 @@
 repos:
+  # Secret scanning
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+
   # Basic file fixes
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -31,7 +37,7 @@ repos:
     hooks:
       - id: pytest
         name: pytest
-        entry: uv run pytest
+        entry: make test
         language: system
         pass_filenames: false
 
@@ -40,7 +46,7 @@ repos:
     hooks:
       - id: bandit
         name: bandit
-        entry: uv run bandit -r app
+        entry: make security-check
         language: system
         pass_filenames: false
 
@@ -48,6 +54,6 @@ repos:
     hooks:
       - id: pip-audit
         name: pip-audit
-        entry: uv run pip-audit
+        entry: make audit
         language: system
         pass_filenames: false

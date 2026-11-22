@@ -7,12 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.exceptions import (
+    AccessDeniedError,
     AuthenticationError,
     InactiveUserError,
     UnverifiedEmailError,
 )
 from app.core.security import verify_token
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, run_after_commit
 from app.models.user import User
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -24,11 +25,13 @@ oauth2_scheme = OAuth2PasswordBearer(
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     FastAPI dependency that provides one AsyncSession per HTTP request.
-    Commits happen explicitly in services, not automatically here.
+    Commit validated responses before they are sent.
     """
     async with AsyncSessionLocal() as session:
         try:
             yield session
+            await session.commit()
+            await run_after_commit(session)
         except Exception:
             await session.rollback()
             raise
@@ -36,20 +39,29 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+def require_cookie_origin(request: Request) -> None:
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        return
+    origin = request.headers.get("origin")
+    trusted = {str(request.base_url).rstrip("/"), *settings.CORS_ORIGINS}
+    fetch_site = request.headers.get("sec-fetch-site")
+    if (origin and origin not in trusted) or (
+        not origin and fetch_site in {"cross-site", "same-site"}
+    ):
+        raise AccessDeniedError("Untrusted origin for cookie authentication")
+
+
 async def get_current_user(
     request: Request,
     token_from_header: str | None = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> User:
     """
     Extract user from HttpOnly Cookie OR Authorization Header.
     """
-    token = None
-
-    if "access_token" in request.cookies:
-        token = request.cookies["access_token"]
-    elif token_from_header:
-        token = token_from_header
+    token = token_from_header or request.cookies.get("access_token")
+    if token and not token_from_header:
+        require_cookie_origin(request)
 
     if not token:
         raise AuthenticationError("Not authenticated")
@@ -69,8 +81,8 @@ async def get_current_user(
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
-    if not user:
-        raise AuthenticationError("User not found or inactive")
+    if not user or payload.get("auth_version", 0) != (user.auth_version or 0):
+        raise AuthenticationError("Session expired or user inactive")
 
     request.state.user = user
     return user

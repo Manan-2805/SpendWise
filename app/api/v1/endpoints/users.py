@@ -1,21 +1,19 @@
-from fastapi import APIRouter, Depends, Request, status
-from fastapi_cache.decorator import cache
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_active_user, get_db
-from app.core.cache import versioned_key_builder
+from app.core.security import clear_auth_cookies
 from app.models.user import User
 from app.schemas.auth import PasswordChangeRequest
 from app.schemas.user import UserResponse, UserUpdate
+from app.services.auth import AuthService
 from app.services.user import UserService
 
 router = APIRouter()
 
 
 @router.get("/me", response_model=UserResponse)
-@cache(expire=3600, key_builder=versioned_key_builder)
 async def get_me(
-    _: Request,
     current_user: User = Depends(get_current_active_user),
 ) -> User:
     """Get current authenticated user's profile."""
@@ -26,7 +24,7 @@ async def get_me(
 async def update_me(
     data: UserUpdate,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> UserResponse:
     """Update current user's profile."""
     user_service = UserService(db)
@@ -37,23 +35,24 @@ async def update_me(
 @router.post("/me/password")
 async def change_password(
     data: PasswordChangeRequest,
+    response: Response,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> dict[str, str]:
     """Change current user's password."""
-    user_service = UserService(db)
-    await user_service.change_password(
+    await AuthService(db).change_password(
         current_user.id,
         data.current_password,
         data.new_password,
     )
+    clear_auth_cookies(response)
     return {"message": "Password changed successfully"}
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_me(
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> None:
     """Soft delete current user's account."""
     user_service = UserService(db)

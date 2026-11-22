@@ -2,6 +2,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AccessDeniedError, CategoryNotFoundError, ConflictError
 from app.models.category import Category
@@ -11,7 +12,7 @@ from app.services.category import CategoryService
 
 @pytest.mark.asyncio
 async def test_get_all_for_user() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 
@@ -42,7 +43,7 @@ async def test_get_all_for_user() -> None:
 
 @pytest.mark.asyncio
 async def test_get_by_id_success() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 
@@ -62,7 +63,7 @@ async def test_get_by_id_success() -> None:
 
 @pytest.mark.asyncio
 async def test_get_by_id_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 
@@ -73,7 +74,7 @@ async def test_get_by_id_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_create_category_success() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
     service.audit_service = MagicMock()
@@ -110,7 +111,7 @@ async def test_create_category_success() -> None:
 
 @pytest.mark.asyncio
 async def test_create_category_duplicate() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 
@@ -131,7 +132,7 @@ async def test_create_category_duplicate() -> None:
 
 @pytest.mark.asyncio
 async def test_get_by_id_access_denied() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 
@@ -145,7 +146,7 @@ async def test_get_by_id_access_denied() -> None:
 
 @pytest.mark.asyncio
 async def test_update_category_success() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
     service.audit_service = MagicMock()
@@ -179,7 +180,7 @@ async def test_update_category_success() -> None:
 
 @pytest.mark.asyncio
 async def test_update_category_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 
@@ -190,7 +191,7 @@ async def test_update_category_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_update_category_access_denied() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 
@@ -201,7 +202,7 @@ async def test_update_category_access_denied() -> None:
 
 @pytest.mark.asyncio
 async def test_update_category_duplicate() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 
@@ -217,7 +218,7 @@ async def test_update_category_duplicate() -> None:
 
 @pytest.mark.asyncio
 async def test_delete_category_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 
@@ -228,7 +229,7 @@ async def test_delete_category_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_delete_category_access_denied() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 
@@ -239,7 +240,7 @@ async def test_delete_category_access_denied() -> None:
 
 @pytest.mark.asyncio
 async def test_delete_category_with_active_transactions_no_reassign() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 
@@ -252,7 +253,7 @@ async def test_delete_category_with_active_transactions_no_reassign() -> None:
 
 @pytest.mark.asyncio
 async def test_delete_category_with_reassign() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
     service.audit_service = MagicMock()
@@ -267,14 +268,14 @@ async def test_delete_category_with_reassign() -> None:
 
     await service.soft_delete(category_id=1, user_id=1, reassign_to_id=2)
 
-    service.repo.reassign_transactions.assert_called_once_with(1, 2)
+    service.repo.reassign_transactions.assert_called_once_with(1, 2, 1)
     service.repo.soft_delete.assert_called_once_with(1)
     service.audit_service.log_action.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_delete_category_reassign_target_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 
@@ -289,7 +290,7 @@ async def test_delete_category_reassign_target_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_delete_category_reassign_target_access_denied() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = CategoryService(db)
     service.repo = MagicMock()
 

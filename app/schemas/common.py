@@ -1,6 +1,12 @@
 from pydantic import BaseModel, Field
 
 
+def require_value[Value](value: Value | None) -> Value:
+    if value is None:
+        raise ValueError("Field cannot be null")
+    return value
+
+
 class PaginatedResponse[T](BaseModel):
     """
     Generic paginated response — works for any resource type.

@@ -3,14 +3,15 @@ from typing import Any
 import structlog
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import task_prerun
+from celery.signals import setup_logging, task_prerun
 
 from app.core.config import settings
+from app.core.logging import configure_logging
 
 celery_app = Celery(
     "spendwise",
-    broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL,
+    broker=settings.CELERY_BROKER_URL,
+    backend=settings.CELERY_RESULT_BACKEND,
     include=["app.worker.tasks"],
 )
 
@@ -20,6 +21,7 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
+    broker_connection_timeout=2,
     task_soft_time_limit=300,
     task_time_limit=600,
 )
@@ -36,9 +38,14 @@ celery_app.conf.beat_schedule = {
 }
 
 
+@setup_logging.connect
+def setup_worker_logging(**_kwargs: Any) -> None:
+    configure_logging(debug=settings.DEBUG)
+
+
 @task_prerun.connect
 def task_prerun_handler(
-    task_id: str, task: Any, _args: tuple[Any, ...], kwargs: dict[str, Any], **_kw: Any
+    task_id: str, task: Any, kwargs: dict[str, Any], **_kw: Any
 ) -> None:
     """Inject correlation ID to task structured log context."""
     corr_id = kwargs.get("correlation_id") or getattr(

@@ -32,6 +32,13 @@ class Transaction(Base, TimestampMixin, SoftDeleteMixin):
         CheckConstraint("type IN ('income', 'expense')", name="ck_transaction_type"),
         Index("ix_transactions_user_date", "user_id", "transaction_date"),
         Index(
+            "ix_transactions_active_user_date_id",
+            "user_id",
+            "transaction_date",
+            "id",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index(
             "ix_transactions_active",
             "id",
             postgresql_where=text("deleted_at IS NULL"),

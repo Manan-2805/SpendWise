@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -19,7 +20,9 @@ class AuditService:
         elif isinstance(val, list):
             return [self._sanitize(x) for x in val]
         elif isinstance(val, Decimal):
-            return float(val)
+            return str(val)
+        elif isinstance(val, date):
+            return val.isoformat()
         return val
 
     async def log_action(

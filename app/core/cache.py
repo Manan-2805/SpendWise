@@ -1,14 +1,23 @@
 import asyncio
 import json
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 import structlog
 from fastapi import Request, Response
+from redis.exceptions import RedisError
 
 from app.core.redis import redis_client
 
 logger = structlog.get_logger()
+
+RELEASE_LOCK = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
 
 
 async def get_or_set_cache[T](
@@ -16,39 +25,45 @@ async def get_or_set_cache[T](
     factory: Callable[[], Awaitable[T]],
     ttl: int = 3600,
 ) -> T:
-    cached_val = await redis_client.get(key)
-    if cached_val is not None:
-        try:
-            return cast(T, json.loads(cached_val))
-        except Exception:
-            return cached_val  # type: ignore[return-value]
-
-    lock_key: str = f"lock:{key}"
+    lock_key = f"{key}:lock"
+    owner = uuid.uuid4().hex
     acquired = False
-    for _ in range(50):
-        acquired = bool(await redis_client.set(lock_key, "1", nx=True, ex=5))
-        if acquired:
-            break
-        await asyncio.sleep(0.1)
-
-    if not acquired:
-        logger.warning("cache_lock_acquisition_failed", key=key)
-        return await factory()
+    try:
+        for _ in range(5):
+            cached = await redis_client.get(key)
+            if cached is not None:
+                try:
+                    return cast(T, json.loads(cached))
+                except (ValueError, TypeError):
+                    logger.warning("invalid_cache_entry")
+            acquired = bool(await redis_client.set(lock_key, owner, nx=True, ex=5))
+            if acquired:
+                break
+            await asyncio.sleep(0.04)
+    except RedisError:
+        logger.warning("cache_read_failed")
 
     try:
-        cached_val = await redis_client.get(key)
-        if cached_val is not None:
+        if acquired:
             try:
-                return cast(T, json.loads(cached_val))
-            except Exception:
-                return cached_val  # type: ignore[return-value]
-
+                cached = await redis_client.get(key)
+                if cached is not None:
+                    return cast(T, json.loads(cached))
+            except (RedisError, ValueError, TypeError):
+                logger.warning("cache_recheck_failed")
         result = await factory()
-        serialized: str = json.dumps(result, default=str)
-        await redis_client.set(key, serialized, ex=ttl)
+        if acquired:
+            try:
+                await redis_client.set(key, json.dumps(result, default=str), ex=ttl)
+            except RedisError:
+                logger.warning("cache_write_failed")
         return result
     finally:
-        await redis_client.delete(lock_key)
+        if acquired:
+            try:
+                await redis_client.eval(RELEASE_LOCK, 1, lock_key, owner)
+            except RedisError:
+                logger.warning("cache_lock_release_failed")
 
 
 def versioned_key_builder(

@@ -16,7 +16,7 @@ class MonthlySummaryResponse(BaseModel):
 class CategoryBreakdownResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    category_id: int
+    category_id: int | None
     category_name: str
     category_color: str | None = None
     category_icon: str | None = None

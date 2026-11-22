@@ -5,8 +5,17 @@
 # ─────────────────────────────────────────
 APP_NAME    := spendwise
 DOCKER_COMP := docker compose
+TEST_COMP   := $(DOCKER_COMP) -p spendwise-test -f docker-compose.test.yml
 PYTHON      := uv run python
 UV          := uv
+
+DEV_POSTGRES_PORT ?= 15432
+DEV_REDIS_PORT ?= 16379
+export DEV_POSTGRES_PORT DEV_REDIS_PORT
+DEV_SETTINGS = DATABASE_URL=postgresql://spendwise:spendwise_dev_password@127.0.0.1:$(DEV_POSTGRES_PORT)/spendwise \
+	REDIS_URL=redis://127.0.0.1:$(DEV_REDIS_PORT)/0 \
+	CELERY_BROKER_URL=redis://127.0.0.1:$(DEV_REDIS_PORT)/1 \
+	CELERY_RESULT_BACKEND=redis://127.0.0.1:$(DEV_REDIS_PORT)/2
 
 .DEFAULT_GOAL := help
 
@@ -15,18 +24,19 @@ UV          := uv
 # ─────────────────────────────────────────
 .PHONY: help
 help:  ## Show this help message
-	@python -c "import sys, re; lines = [m.groups() for f in sys.argv[1:] for l in open(f, encoding='utf-8') if (m := re.match(r'^([a-zA-Z_-]+):.*?## (.*)$$', l))]; [print(f'  \x1b[36m{k:<20}\x1b[0m {v}') for k, v in sorted(lines)]" $(MAKEFILE_LIST)
+	@python3 -c "import sys, re; lines = [m.groups() for f in sys.argv[1:] for l in open(f, encoding='utf-8') if (m := re.match(r'^([a-zA-Z0-9_-]+):.*?## (.*)$$', l))]; [print(f'  \x1b[36m{k:<20}\x1b[0m {v}') for k, v in sorted(lines)]" $(MAKEFILE_LIST)
 
 # ─────────────────────────────────────────
 # Development environment
 # ─────────────────────────────────────────
 .PHONY: install
 install:  ## Install all dependencies (including dev)
-	$(UV) sync --group dev
+	$(UV) sync --locked --group dev
+	$(PYTHON) scripts/setup_dev.py
 
 .PHONY: install-prod
 install-prod:  ## Install production dependencies only
-	$(UV) sync --no-dev
+	$(UV) sync --locked --no-dev
 
 .PHONY: update
 update:  ## Update all dependencies to latest allowed versions
@@ -36,27 +46,45 @@ update:  ## Update all dependencies to latest allowed versions
 # ─────────────────────────────────────────
 # Running the application
 # ─────────────────────────────────────────
+.PHONY: dev-services prepare-dev worker smoke
+dev-services:  ## Start development PostgreSQL and Redis and wait until healthy
+	$(DOCKER_COMP) up -d --wait postgres redis
+
+prepare-dev: dev-services
+	@$(DEV_SETTINGS) $(UV) run alembic upgrade head
+
+smoke:  ## Check local API liveness and readiness
+	curl -fsS http://127.0.0.1:8000/api/v1/health/live
+	curl -fsS http://127.0.0.1:8000/api/v1/health/ready
+
+worker: prepare-dev  ## Start the local Celery worker
+	@$(DEV_SETTINGS) $(UV) run celery -A app.worker.celery_app worker --loglevel=info
+
 .PHONY: dev
-dev:  ## Run development server with hot reload (requires running DB and Redis)
-	$(UV) run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app
+dev: prepare-dev  ## Run development server with reload
+	@$(DEV_SETTINGS) $(UV) run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app
 
 .PHONY: run
-run:  ## Run production server locally
-	$(UV) run granian --interface asgi app.main:app \
-		--workers 4 \
-		--host 0.0.0.0 \
+run: prepare-dev  ## Run Granian locally with development settings
+	@$(DEV_SETTINGS) $(UV) run granian --interface asgi app.main:app \
+		--workers 2 \
+		--host 127.0.0.1 \
 		--port 8000
 
 # ─────────────────────────────────────────
 # Docker
 # ─────────────────────────────────────────
 .PHONY: up
-up:  ## Start the full stack (API + DB + Redis) in background
+up:  ## Start the development API, worker, PostgreSQL and Redis
 	$(DOCKER_COMP) up -d
 
 .PHONY: up-build
 up-build:  ## Build images and start the stack
 	$(DOCKER_COMP) up -d --build
+
+.PHONY: monitoring
+monitoring:  ## Start the development stack with Prometheus and Grafana
+	$(DOCKER_COMP) -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 
 .PHONY: down
 down:  ## Stop and remove containers
@@ -117,36 +145,42 @@ db-current:  ## Show current migration state
 # ─────────────────────────────────────────
 # Testing
 # ─────────────────────────────────────────
-.PHONY: test
-test:  ## Run all tests
+.PHONY: test-services test benchmark
+test-services:  ## Start disposable PostgreSQL and Redis on dedicated local ports
+	$(TEST_COMP) up -d --wait
+
+benchmark: test-services  ## Measure API throughput and p95 on disposable services
+	$(PYTHON) scripts/run_load_test.py $(BENCHMARK_ARGS)
+
+test: test-services  ## Run all tests with the 85% coverage gate
 	$(UV) run pytest
 
 .PHONY: test-unit
-test-unit:  ## Run unit tests only
-	$(UV) run pytest tests/unit/ -v
+test-unit:  ## Run unit tests without starting services
+	$(UV) run pytest --no-cov tests/unit/
 
 .PHONY: test-integration
-test-integration:  ## Run integration tests only
-	$(UV) run pytest tests/integration/ -v
+test-integration: test-services  ## Run integration tests against disposable services
+	$(UV) run pytest --no-cov tests/integration/
 
 .PHONY: test-cov
-test-cov:  ## Run tests with coverage report
+test-cov: test-services  ## Run tests with coverage report
 	$(UV) run pytest --cov=app --cov-report=html --cov-report=term-missing
 
 .PHONY: test-fast
-test-fast:  ## Run tests — stop on first failure, no coverage
+test-fast: test-services  ## Run tests with coverage and stop on the first failure
 	$(UV) run pytest -x -q
 
 .PHONY: test-watch
-test-watch:  ## Run tests and re-run on file changes (requires pytest-watch)
-	$(UV) run ptw -- -x -q
+test-watch:  ## Rerun tests on application or test source changes
+	$(UV) run watchfiles "make test-fast" app tests
 
 # ─────────────────────────────────────────
 # Code quality & Security
 # ─────────────────────────────────────────
 .PHONY: pre-commit-install
 pre-commit-install:  ## Install git pre-commit hook
-	$(UV) run pre-commit install
+	$(UV) run pre-commit install --install-hooks
 
 .PHONY: pre-commit-run
 pre-commit-run:  ## Run pre-commit hooks manually on all files
@@ -154,19 +188,19 @@ pre-commit-run:  ## Run pre-commit hooks manually on all files
 
 .PHONY: lint
 lint:  ## Run ruff linter
-	$(UV) run ruff check alembic/ app/ tests/
+	$(UV) run ruff check alembic/ app/ scripts/ tests/
 
 .PHONY: lint-fix
 lint-fix:  ## Run ruff linter and auto-fix issues
-	$(UV) run ruff check --fix alembic/ app/ tests/
+	$(UV) run ruff check --fix alembic/ app/ scripts/ tests/
 
 .PHONY: format
 format:  ## Format code with ruff
-	$(UV) run ruff format alembic/ app/ tests/
+	$(UV) run ruff format alembic/ app/ scripts/ tests/
 
 .PHONY: format-check
 format-check:  ## Check code formatting without making changes
-	$(UV) run ruff format --check alembic/ app/ tests/
+	$(UV) run ruff format --check alembic/ app/ scripts/ tests/
 
 .PHONY: typecheck
 typecheck:  ## Run mypy type checker
@@ -181,14 +215,14 @@ audit:  ## Run pip-audit to scan dependencies for known vulnerabilities
 	$(UV) run pip-audit
 
 .PHONY: check
-check: lint format-check typecheck security-check audit  ## Run all code quality and security checks
+check: lint format-check typecheck security-check audit test  ## Run tests, lint, type checks and security checks
 
 # ─────────────────────────────────────────
 # Utilities
 # ─────────────────────────────────────────
 .PHONY: seed
-seed:  ## Seed the development database with sample data
-	$(PYTHON) scripts/seed_db.py
+seed: prepare-dev  ## Seed the local development database with sample data
+	@$(DEV_SETTINGS) $(PYTHON) scripts/seed_db.py
 
 .PHONY: create-superuser
 create-superuser:  ## Create an admin user interactively
@@ -204,6 +238,14 @@ clean:  ## Remove Python cache files
 	find . -type f -name "*.pyc" -delete 2>/dev/null; true
 	find . -type f -name "*.pyo" -delete 2>/dev/null; true
 	rm -rf .coverage htmlcov/ .pytest_cache/ .mypy_cache/ .ruff_cache/
+
+.PHONY: prod-migrate prod-up
+prod-migrate:  ## Run production migrations with the migration-role database URL
+	@test -n "$${SPENDWISE_MIGRATION_DATABASE_URL:-}" || { echo "Set SPENDWISE_MIGRATION_DATABASE_URL"; exit 1; }
+	$(DOCKER_COMP) -f docker-compose.prod.yml run --rm migrate
+
+prod-up:  ## Start production services after a successful migration
+	$(DOCKER_COMP) -f docker-compose.prod.yml up -d web celery_worker celery_beat
 
 .PHONY: build
 build:  ## Build the production Docker image

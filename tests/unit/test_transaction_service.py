@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
     AccessDeniedError,
@@ -21,7 +22,7 @@ from app.services.transaction import TransactionService
 
 @pytest.mark.asyncio
 async def test_create_transaction_success() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.repo = MagicMock()
     service.category_repo = MagicMock()
@@ -43,12 +44,6 @@ async def test_create_transaction_success() -> None:
     service.repo.create = AsyncMock(return_value=mock_tx)
     service.audit_service.log_action = AsyncMock()
 
-    # Stub keys and delete on redis for cache invalidation
-    from app.core.redis import redis_client
-
-    redis_client.keys = AsyncMock(return_value=[])
-    redis_client.delete = AsyncMock()
-
     data = TransactionCreate(
         amount=Decimal("45.50"),
         description="Electricity",
@@ -66,7 +61,7 @@ async def test_create_transaction_success() -> None:
 
 @pytest.mark.asyncio
 async def test_create_transaction_category_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.category_repo = MagicMock()
 
@@ -85,7 +80,7 @@ async def test_create_transaction_category_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_create_transaction_category_access_denied() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.category_repo = MagicMock()
 
@@ -106,7 +101,7 @@ async def test_create_transaction_category_access_denied() -> None:
 
 @pytest.mark.asyncio
 async def test_get_filtered_returns_tuple() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.repo = MagicMock()
 
@@ -123,7 +118,7 @@ async def test_get_filtered_returns_tuple() -> None:
 
 @pytest.mark.asyncio
 async def test_get_by_id_with_category_success() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.repo = MagicMock()
 
@@ -148,7 +143,7 @@ async def test_get_by_id_with_category_success() -> None:
 
 @pytest.mark.asyncio
 async def test_get_by_id_with_category_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.repo = MagicMock()
 
@@ -159,7 +154,7 @@ async def test_get_by_id_with_category_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_update_transaction_success() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.repo = MagicMock()
     service.category_repo = MagicMock()
@@ -193,10 +188,6 @@ async def test_update_transaction_success() -> None:
     service.repo.update = AsyncMock(return_value=updated_tx)
     service.audit_service.log_action = AsyncMock()
 
-    from app.core.redis import redis_client
-
-    redis_client.keys = AsyncMock(return_value=[])
-
     update_data = TransactionUpdate(category_id=2, description="new")
     await service.update(1, update_data, 1)
 
@@ -206,7 +197,7 @@ async def test_update_transaction_success() -> None:
 
 @pytest.mark.asyncio
 async def test_update_transaction_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.repo = MagicMock()
 
@@ -217,7 +208,7 @@ async def test_update_transaction_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_update_transaction_access_denied() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.repo = MagicMock()
 
@@ -229,7 +220,7 @@ async def test_update_transaction_access_denied() -> None:
 
 @pytest.mark.asyncio
 async def test_update_transaction_category_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.repo = MagicMock()
     service.category_repo = MagicMock()
@@ -244,7 +235,7 @@ async def test_update_transaction_category_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_update_transaction_category_access_denied() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.repo = MagicMock()
     service.category_repo = MagicMock()
@@ -261,7 +252,7 @@ async def test_update_transaction_category_access_denied() -> None:
 
 @pytest.mark.asyncio
 async def test_soft_delete_transaction_success() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.repo = MagicMock()
     service.audit_service = MagicMock()
@@ -271,10 +262,6 @@ async def test_soft_delete_transaction_success() -> None:
     service.repo.soft_delete = AsyncMock()
     service.audit_service.log_action = AsyncMock()
 
-    from app.core.redis import redis_client
-
-    redis_client.keys = AsyncMock(return_value=[])
-
     await service.soft_delete(1, 1)
     service.repo.soft_delete.assert_called_once_with(1)
     service.audit_service.log_action.assert_called_once()
@@ -282,7 +269,7 @@ async def test_soft_delete_transaction_success() -> None:
 
 @pytest.mark.asyncio
 async def test_soft_delete_transaction_not_found() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.repo = MagicMock()
 
@@ -293,7 +280,7 @@ async def test_soft_delete_transaction_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_soft_delete_transaction_access_denied() -> None:
-    db = MagicMock()
+    db = MagicMock(spec=AsyncSession)
     service = TransactionService(db)
     service.repo = MagicMock()
 

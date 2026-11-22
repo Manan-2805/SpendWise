@@ -1,3 +1,4 @@
+import asyncio
 import secrets
 import string
 from datetime import UTC, datetime, timedelta
@@ -18,6 +19,7 @@ from app.core.security import (
     verify_password,
     verify_token,
 )
+from app.db.session import after_commit
 from app.models.user import User
 from app.repositories.auth import AuthRepository
 from app.schemas.auth import RegisterRequest
@@ -52,8 +54,10 @@ class AuthService:
         user = await self.user_service.repo.get_by_email(email)
 
         if not user:
-            verify_password(
-                password, "$2b$12$KM/voy8TSax1XOEtR6/dOufvPnHAFSNSg99mLyVAHh8D4cG7Y0og2"
+            await asyncio.to_thread(
+                verify_password,
+                password,
+                "$2b$12$KM/voy8TSax1XOEtR6/dOufvPnHAFSNSg99mLyVAHh8D4cG7Y0og2",
             )
             await self.audit_service.log_action(
                 action="LOGIN_FAILED",
@@ -63,8 +67,8 @@ class AuthService:
             )
             raise InvalidCredentialsError()
 
-        if not user.hashed_password or not verify_password(
-            password, user.hashed_password
+        if not user.hashed_password or not await asyncio.to_thread(
+            verify_password, password, user.hashed_password
         ):
             await self.audit_service.log_action(
                 action="LOGIN_FAILED",
@@ -78,8 +82,14 @@ class AuthService:
         if not user.is_active:
             raise InactiveUserError()
 
-        # Generate tokens
-        access_token = create_access_token(subject=user.id)
+        checked_hash = user.hashed_password
+        active_user = await self.auth_repo.lock_active_user(user.id)
+        if not active_user or active_user.hashed_password != checked_hash:
+            raise InvalidCredentialsError()
+
+        access_token = create_access_token(
+            subject=user.id, auth_version=active_user.auth_version or 0
+        )
         refresh_token, jti = create_refresh_token(subject=user.id)
 
         token_hash = hash_refresh_token(refresh_token)
@@ -114,13 +124,15 @@ class AuthService:
         Refresh Token Rotation with Reuse Detection.
         """
         try:
-            _ = verify_token(raw_refresh_token, expected_type="refresh")
+            payload = verify_token(raw_refresh_token, expected_type="refresh")
+            user_id = int(payload["sub"])
         except Exception as e:
             raise InvalidTokenError("Invalid refresh token") from e
 
+        user = await self.auth_repo.lock_active_user(user_id)
         token_hash = hash_refresh_token(raw_refresh_token)
         db_token = await self.auth_repo.get_by_hash(token_hash)
-        if not db_token:
+        if not user or not db_token or db_token.user_id != user_id:
             raise InvalidTokenError("Refresh token not found or already revoked")
 
         if db_token.revoked_at is not None:
@@ -135,6 +147,7 @@ class AuthService:
                     "reason": "token_reuse_detected",
                 },
             )
+            await self.db.commit()
             raise InvalidTokenError("Token reuse detected. Session revoked.")
 
         if db_token.expires_at < datetime.now(UTC):
@@ -144,8 +157,9 @@ class AuthService:
         await self.auth_repo.revoke_token(db_token.jti)
 
         # Issue a new pair
-        user_id = db_token.user_id
-        new_access = create_access_token(subject=user_id)
+        new_access = create_access_token(
+            subject=user_id, auth_version=user.auth_version or 0
+        )
         new_refresh, new_jti = create_refresh_token(subject=user_id)
         new_token_hash = hash_refresh_token(new_refresh)
         new_payload = verify_token(new_refresh, expected_type="refresh")
@@ -165,7 +179,7 @@ class AuthService:
 
     async def revoke_user_tokens(self, user_id: int) -> None:
         """Logout: Delete all active refresh tokens for the user."""
-        await self.auth_repo.revoke_all_for_user(user_id)
+        await self.auth_repo.invalidate_sessions(user_id)
         await self.audit_service.log_action(
             action="TOKEN_REVOKED",
             resource_type="RefreshToken",
@@ -177,8 +191,10 @@ class AuthService:
         self, user_id: int, current_password: str, new_password: str
     ) -> None:
         """Change user password and revoke all active refresh tokens."""
+        if not await self.auth_repo.lock_active_user(user_id):
+            raise InvalidCredentialsError()
         await self.user_service.change_password(user_id, current_password, new_password)
-        await self.auth_repo.revoke_all_for_user(user_id)
+        await self.auth_repo.invalidate_sessions(user_id)
 
     async def login_or_register_oauth(
         self,
@@ -238,7 +254,9 @@ class AuthService:
             raise InactiveUserError()
 
         # Issue tokens
-        access_token = create_access_token(subject=user.id)
+        access_token = create_access_token(
+            subject=user.id, auth_version=user.auth_version or 0
+        )
         refresh_token, jti = create_refresh_token(subject=user.id)
         token_hash = hash_refresh_token(refresh_token)
         payload = verify_token(refresh_token, expected_type="refresh")
@@ -267,23 +285,30 @@ class AuthService:
         """Generate reset token, trigger reset email Celery task, and audit request."""
         user = await self.user_service.repo.get_by_email(email)
         if not user:
-            logger.info("forgot_password_ignored_email_not_found", email=email)
             return
 
         token = secrets.token_urlsafe(32)
         expires_at = datetime.now(UTC) + timedelta(hours=1)
         await self.user_service.repo.update(
             user.id,
-            reset_password_token=token,
+            reset_password_token=hash_refresh_token(token),
             reset_token_expires_at=expires_at,
         )
 
         from app.worker.tasks import send_password_reset_email
 
         ctx = structlog.contextvars.get_contextvars()
-        send_password_reset_email.delay(
-            user.id, token, ctx.get("correlation_id", "SYSTEM")
-        )
+
+        async def enqueue() -> None:
+            await asyncio.to_thread(
+                send_password_reset_email.apply_async,
+                args=(user.id, token),
+                kwargs={"correlation_id": ctx.get("correlation_id")},
+                argsrepr="(<account>, <redacted>)",
+                expires=3600,
+            )
+
+        after_commit(self.db, enqueue)
 
         await self.audit_service.log_action(
             action="FORGOT_PASSWORD_REQUESTED",
@@ -298,19 +323,20 @@ class AuthService:
         if not user:
             raise InvalidTokenError("Invalid or expired password reset token")
 
-        if user.reset_token_expires_at and user.reset_token_expires_at < datetime.now(
-            UTC
+        if (
+            not user.reset_token_expires_at
+            or user.reset_token_expires_at <= datetime.now(UTC)
         ):
             raise InvalidTokenError("Password reset token has expired")
 
-        hashed = hash_password(new_password)
+        hashed = await asyncio.to_thread(hash_password, new_password)
         await self.user_service.repo.update(
             user.id,
             hashed_password=hashed,
             reset_password_token=None,
             reset_token_expires_at=None,
         )
-        await self.auth_repo.revoke_all_for_user(user.id)
+        await self.auth_repo.invalidate_sessions(user.id)
 
         await self.audit_service.log_action(
             action="PASSWORD_RESET_SUCCESS",
@@ -322,13 +348,18 @@ class AuthService:
     async def verify_email(self, token: str) -> None:
         """Verify user email via token."""
         user = await self.user_service.repo.get_by_verification_token(token)
-        if not user:
+        if (
+            not user
+            or not user.verification_token_expires_at
+            or user.verification_token_expires_at <= datetime.now(UTC)
+        ):
             raise InvalidTokenError("Invalid verification token")
 
         await self.user_service.repo.update(
             user.id,
             is_verified=True,
             verification_token=None,
+            verification_token_expires_at=None,
         )
 
         await self.audit_service.log_action(
@@ -346,12 +377,24 @@ class AuthService:
         if user.is_verified:
             return
 
-        token = user.verification_token
-        if not token:
-            token = secrets.token_urlsafe(32)
-            await self.user_service.repo.update(user.id, verification_token=token)
+        token = secrets.token_urlsafe(32)
+        await self.user_service.repo.update(
+            user.id,
+            verification_token=hash_refresh_token(token),
+            verification_token_expires_at=datetime.now(UTC) + timedelta(days=1),
+        )
 
         from app.worker.tasks import send_verification_email
 
         ctx = structlog.contextvars.get_contextvars()
-        send_verification_email.delay(user.id, ctx.get("correlation_id", "SYSTEM"))
+
+        async def enqueue() -> None:
+            await asyncio.to_thread(
+                send_verification_email.apply_async,
+                args=(user.id, token),
+                kwargs={"correlation_id": ctx.get("correlation_id")},
+                argsrepr="(<account>, <redacted>)",
+                expires=86400,
+            )
+
+        after_commit(self.db, enqueue)

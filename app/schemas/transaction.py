@@ -3,9 +3,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from app.schemas.category import CategoryResponse
+from app.schemas.common import require_value
 
 PositiveAmount = Annotated[
     Decimal,
@@ -18,16 +26,26 @@ PositiveAmount = Annotated[
 ]
 
 
+def normalise_tags(tags: list[str]) -> list[str]:
+    return list(dict.fromkeys(tag.strip().lower() for tag in tags if tag.strip()))
+
+
+Description = Annotated[str, Field(min_length=1, max_length=500)]
+Tag = Annotated[str, Field(max_length=64)]
+Tags = Annotated[list[Tag], Field(max_length=10), AfterValidator(normalise_tags)]
+Notes = Annotated[str, Field(max_length=1000)]
+
+
 class TransactionBase(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     amount: PositiveAmount
-    description: str = Field(min_length=1, max_length=500)
+    description: Description
     transaction_date: Date
     category_id: int = Field(gt=0)
     type: Literal["income", "expense"]
-    notes: str | None = Field(default=None, max_length=1000)
-    tags: list[str] = Field(default_factory=list, max_length=10)
+    notes: Notes | None = None
+    tags: Tags = Field(default_factory=list)
 
     @field_validator("description")
     @classmethod
@@ -37,11 +55,6 @@ class TransactionBase(BaseModel):
             raise ValueError("Description cannot be empty")
         return v
 
-    @field_validator("tags")
-    @classmethod
-    def normalise_tags(cls, v: list[str]) -> list[str]:
-        return list({tag.lower().strip() for tag in v if tag.strip()})
-
 
 class TransactionCreate(TransactionBase):
     pass
@@ -50,39 +63,36 @@ class TransactionCreate(TransactionBase):
 class TransactionUpdate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    amount: PositiveAmount | None = None
-    description: str | None = Field(default=None, min_length=1, max_length=500)
-    transaction_date: Date | None = None
+    amount: Annotated[PositiveAmount | None, AfterValidator(require_value)] = None
+    description: Annotated[Description | None, AfterValidator(require_value)] = None
+    transaction_date: Annotated[Date | None, AfterValidator(require_value)] = None
     category_id: int | None = Field(default=None, gt=0)
-    type: Literal["income", "expense"] | None = None
-    notes: str | None = None
-    tags: list[str] | None = None
+    type: Annotated[
+        Literal["income", "expense"] | None, AfterValidator(require_value)
+    ] = None
+    notes: Notes | None = None
+    tags: Annotated[Tags | None, AfterValidator(require_value)] = None
 
 
-class TransactionResponse(TransactionBase):
-    model_config = ConfigDict(
-        from_attributes=True,
-        use_enum_values=True,
-    )
+class TransactionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
     id: int
     user_id: int
     created_at: datetime
     updated_at: datetime
+    amount: Decimal
+    description: str | None
+    transaction_date: Date
+    category_id: int | None
+    type: Literal["income", "expense"]
+    notes: str | None
+    tags: list[str]
     category: CategoryResponse | None = None
 
 
-class TransactionWithCategoryResponse(TransactionBase):
-    model_config = ConfigDict(
-        from_attributes=True,
-        use_enum_values=True,
-    )
-
-    id: int
-    user_id: int
-    created_at: datetime
-    updated_at: datetime
-    category: CategoryResponse
+class TransactionWithCategoryResponse(TransactionResponse):
+    pass
 
 
 class TransactionFilters(BaseModel):

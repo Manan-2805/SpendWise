@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import AsyncSessionLocal
 from app.models.category import Category
@@ -57,6 +58,9 @@ SYSTEM_CATEGORIES = [
 
 
 async def seed() -> None:
+    if settings.ENVIRONMENT != "development":
+        raise RuntimeError("Seeding is available only in development mode")
+
     print("--- Seeding Database ---")
     async with AsyncSessionLocal() as session:
         print("Seeding system categories...")

@@ -1,6 +1,9 @@
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field
+
+from app.schemas.common import require_value
 
 
 class UserBase(BaseModel):
@@ -19,8 +22,12 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     """PATCH /users/me — all fields optional."""
 
-    username: str | None = Field(default=None, min_length=3, max_length=50)
-    email: EmailStr | None = None
+    username: Annotated[
+        str | None,
+        Field(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$"),
+        AfterValidator(require_value),
+    ] = None
+    email: Annotated[EmailStr | None, AfterValidator(require_value)] = None
 
 
 class UserResponse(UserBase):
