@@ -57,6 +57,8 @@ test('signs in, records an expense and sees it in the report', async ({ page, re
   await page.getByRole('button', { name: 'Use dark theme' }).click()
   await expect(page.locator('html')).toHaveClass(/dark/)
   expect(await header.evaluate(element => getComputedStyle(element).backdropFilter)).toContain('blur')
+  const recentRow = page.getByRole('region', { name: 'Recent transactions' }).getByRole('row', { name: /Studio supplies/ })
+  await expect(recentRow).toHaveCSS('transition-property', 'background-color')
   await checkAccessibility()
   if (process.env.SPENDWISE_SCREENSHOTS) {
     const dir = resolve(process.env.SPENDWISE_SCREENSHOTS)

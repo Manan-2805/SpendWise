@@ -182,6 +182,14 @@ Verified the production nginx proxy with an isolated HTTPS ingress and the real 
 | `docs/screenshots/frontend/transactions-mobile.png` | Refreshed the browser screenshot | Show the more compact navigation |
 | `docs/CHANGELOG_AI.md` | Recorded the screenshot review fixes | Track this visual follow-up |
 
+### PR #7 · Dark-mode table contrast
+
+| File | What changed | Why |
+|---|---|---|
+| `frontend/src/components/ui/table.tsx` | Limited table-row transitions to the background color | Keep text legible throughout a theme switch |
+| `frontend/e2e/spendwise.spec.ts` | Checked the transaction row transition before the dark-mode axe scan | Catch a foreground transition even if the scan runs after it finishes |
+| `docs/CHANGELOG_AI.md` | Recorded the contrast fix and regression coverage | Track the CI follow-up |
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.
