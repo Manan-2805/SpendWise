@@ -12,6 +12,7 @@ Measure API capacity, add overload protection, and update the README. Prepare a 
 | `alembic.ini` | Add the checkout directory to the migration import path | Run migrations from the production image's uninstalled application source |
 | `docker-compose.monitoring.yml` | Disabled the API image's HTTP probe for Celery | Use process status as the Celery startup signal |
 | `docker-compose.yml` | Made the local application Dockerfile selectable | Reuse the production runtime image for local monitoring |
+| `docs/plans/2026-11-23-overload.md` | Recorded acceptance targets, the session baseline, and a staged test-first plan | Review the overload changes before implementation |
 | `scripts/capacity_observability.py` | Collect per-worker SQL, checkout, Redis and bcrypt timings on the benchmark process | Locate stalls through benchmark instrumentation |
 | `scripts/run_capacity_test.py` | Added open-loop scheduling, health probes, per-process CPU and database container sampling. Clean up benchmark worker processes between rounds. | Reproduce the mixed workload and distinguish client scheduling limits from API behavior |
 | `scripts/seed_load_test_db.py` | Added a deterministic capacity dataset, batched inserts and count validation | Reproduce and verify the required cardinality |
