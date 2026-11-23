@@ -156,3 +156,22 @@ Run Granian behind HTTPS. Probe `/api/v1/health/live` for liveness and `/api/v1/
 | The API cannot reach its dependencies | Check Docker, then run `make dev-services`. Override `DEV_POSTGRES_PORT` or `DEV_REDIS_PORT` on the Make command if ports 15432 or 16379 are in use. |
 | Swagger returns 404 | Set `DEBUG=true` for the development server. |
 | Tests cannot connect | Check the disposable test PostgreSQL and Redis services. |
+
+## SpendWise web app
+
+Use Node 22.23.5 and npm 10.9.9. From the repository root, run `make frontend-install`, start the API with `make dev`, then run `make frontend-dev` in another terminal. Open http://localhost:3000. Vite requires port 3000 and proxies `/api/v1` with the browser's Host so both requests and HttpOnly cookies use the frontend origin.
+
+The app covers account entry, email verification and password reset, monthly reporting, transaction and category management, and profile changes. It displays exact decimal amounts. Set the public build variable `VITE_CURRENCY` to an ISO currency code if you want localized currency display.
+
+### Checks and deployment
+
+- Run `make frontend-check` for ESLint, Vitest, strict TypeScript, a production build, contrast, and gzip budgets. After installing Playwright Chromium, `make frontend-e2e` runs the real browser flow with disposable PostgreSQL and Redis.
+- Export typed API changes with `make openapi` and `npm --prefix frontend run api:generate`. The [runtime API contract](docs/api-contract.md) documents errors and session behavior.
+- For development email, run `docker compose -f docker-compose.mailpit.yml --profile mailpit up -d mailpit` and open http://localhost:8025. Start the local worker with SMTP host `127.0.0.1`, port `1025`, a local sender, `SMTP_STARTTLS=false`, and an empty username. The standard development command leaves Mailpit disabled.
+- The production Compose file includes the frontend nginx service. Serve it through a public HTTPS ingress that preserves the public Host. Supply `SPENDWISE_FRONTEND_URL` and set `SPENDWISE_CORS_ORIGINS` to an array with exactly that HTTPS origin at deployment. Keep deployment values out of Git. nginx serves SPA routes and proxies API paths on the same origin.
+
+### Screenshots
+
+![Dashboard in light mode](docs/screenshots/frontend/dashboard-light.png)
+
+ [Dashboard in dark mode](docs/screenshots/frontend/dashboard-dark.png) · [Transactions on mobile](docs/screenshots/frontend/transactions-mobile.png)

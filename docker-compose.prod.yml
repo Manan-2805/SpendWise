@@ -46,6 +46,18 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_CURRENCY: ${VITE_CURRENCY:-}
+    ports:
+      - "127.0.0.1:${SPENDWISE_FRONTEND_PORT:-8080}:8080"
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
   celery_worker:
     <<: *runtime
     command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info"]

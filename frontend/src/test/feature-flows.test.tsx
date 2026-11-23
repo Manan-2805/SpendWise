@@ -5,8 +5,9 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
-import { queryClient } from '@/app/query'
-import { LoginPage } from '@/features/auth/AuthPages'
+import { queryClient, sessionKey } from '@/app/query'
+import { WorkspaceLayout } from '@/app/Layouts'
+import { ForgotPage, LoginPage, RegisterPage, ResetPage, VerifyPage } from '@/features/auth/AuthPages'
 import CategoriesPage from '@/features/categories/CategoriesPage'
 import TransactionsPage from '@/features/transactions/TransactionsPage'
 import DashboardPage from '@/features/dashboard/DashboardPage'
@@ -55,6 +56,66 @@ describe('feature flows', () => {
     await input.click(screen.getByRole('button', { name: 'Sign in' }))
     expect(await screen.findByText('Check your email')).toBeVisible()
     expect(screen.getByLabelText('Email')).toHaveValue(user.email)
+  })
+
+  it('rejects a registration password longer than the UTF-8 byte limit', async () => {
+    show('/register', <RegisterPage />)
+    const input = userEvent.setup()
+    const tooLong = 'Aa1' + 'é'.repeat(36)
+    await input.type(screen.getByLabelText('Email'), user.email)
+    await input.type(screen.getByLabelText('Username'), user.username)
+    await input.type(screen.getByLabelText('Password', { exact: true }), tooLong)
+    await input.type(screen.getByLabelText('Confirm password'), tooLong)
+    await input.click(screen.getByRole('button', { name: 'Create account' }))
+    expect(await screen.findByText('Use at most 72 UTF-8 bytes.')).toBeVisible()
+  })
+
+  it('keeps password reset requests generic', async () => {
+    server.use(http.post(base + '/auth/forgot-password', () => HttpResponse.json({
+      message: 'If an account exists, a link was sent.',
+    })))
+    show('/forgot-password', <ForgotPage />)
+    const input = userEvent.setup()
+    await input.type(screen.getByLabelText('Email'), user.email)
+    await input.click(screen.getByRole('button', { name: 'Send reset link' }))
+    expect(await screen.findByText('If an account exists, a link was sent.')).toBeVisible()
+  })
+
+  it('requires an explicit click to verify a link exactly once', async () => {
+    let verified = 0
+    server.use(http.get(base + '/auth/verify-email', ({ request }) => {
+      expect(new URL(request.url).searchParams.get('token')).toBe('test-fixture')
+      verified++
+      return HttpResponse.json({ message: 'Email verified successfully.' })
+    }))
+    show('/verify-email?token=test-fixture', <VerifyPage />)
+    expect(verified).toBe(0)
+    await userEvent.click(screen.getByRole('button', { name: 'Verify email' }))
+    expect(await screen.findByText('Email verified successfully.')).toBeVisible()
+    expect(verified).toBe(1)
+  })
+
+  it('submits a password reset without needing a session', async () => {
+    server.use(http.post(base + '/auth/reset-password', async ({ request }) => {
+      expect(await request.json()).toMatchObject({ token: 'test-fixture' })
+      return HttpResponse.json({ message: 'Password reset successfully. Please log in again.' })
+    }))
+    show('/reset-password?token=test-fixture', <ResetPage />)
+    const input = userEvent.setup()
+    await input.type(screen.getByLabelText('New password', { exact: true }), 'NewExample123!')
+    await input.type(screen.getByLabelText('Confirm new password'), 'NewExample123!')
+    await input.click(screen.getByRole('button', { name: 'Reset password' }))
+    expect(await screen.findByText('Password reset successfully. Please log in again.')).toBeVisible()
+  })
+
+  it('clears private query data when logging out', async () => {
+    queryClient.setQueryData(sessionKey, user)
+    queryClient.setQueryData(['transactions', 'recent'], [transaction])
+    server.use(http.post(base + '/auth/logout', () => HttpResponse.json({ message: 'Signed out' })))
+    show('/', <WorkspaceLayout />)
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible()
+    expect(queryClient.getQueryData(['transactions', 'recent'])).toBeUndefined()
   })
 
   it('creates, edits, and deletes an owned category', async () => {
@@ -171,4 +232,18 @@ describe('feature flows', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible()
     expect(screen.getByLabelText('Email')).toHaveValue('updated@example.com')
   })
+  it('sends the user to login after changing their password', async () => {
+    server.use(
+      http.get(base + '/users/me', () => HttpResponse.json(user)),
+      http.post(base + '/auth/change-password', () => HttpResponse.json({ message: 'Password changed' })),
+    )
+    show('/profile', <ProfilePage />)
+    const input = userEvent.setup()
+    await input.type(await screen.findByLabelText('Current password'), 'ExamplePass123!')
+    await input.type(screen.getByLabelText('New password', { exact: true }), 'NewExample123!')
+    await input.type(screen.getByLabelText('Confirm new password'), 'NewExample123!')
+    await input.click(screen.getByRole('button', { name: 'Change password' }))
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeVisible()
+  })
+
 })

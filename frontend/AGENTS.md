@@ -7,4 +7,7 @@
 - Every screen: keyboard accessible, visible focus, good contrast, mobile first.
 - Tests with every feature: Vitest and Testing Library, plus Playwright for key flows.
 ## Commands
-(Fill in after the foundation session.)
+- From the repository root run `make frontend-install` once, then `make frontend-dev`.
+- Run `make frontend-check` for lint, Vitest, strict types, build, contrast, and bundle budgets.
+- Run `npm --prefix frontend exec -- playwright install chromium` once, then `make frontend-e2e`.
+- Regenerate API types with `make openapi` and `npm --prefix frontend run api:generate`.

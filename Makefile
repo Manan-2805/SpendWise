@@ -287,7 +287,7 @@ prod-migrate:  ## Run production migrations with the migration-role database URL
 	$(DOCKER_COMP) -f docker-compose.prod.yml run --rm migrate
 
 prod-up:  ## Start production services after a successful migration
-	$(DOCKER_COMP) -f docker-compose.prod.yml up -d web celery_worker celery_beat
+	$(DOCKER_COMP) -f docker-compose.prod.yml up -d web frontend celery_worker celery_beat
 
 .PHONY: build
 build:  ## Build the production Docker image
@@ -296,3 +296,31 @@ build:  ## Build the production Docker image
 .PHONY: build-dev
 build-dev:  ## Build the development Docker image
 	docker build -t $(APP_NAME):dev -f docker/Dockerfile.dev .
+
+# Frontend
+NPM ?= npm
+.PHONY: frontend-install frontend-dev frontend-lint frontend-test frontend-typecheck frontend-build frontend-check frontend-e2e
+frontend-install:  ## Install the locked frontend dependencies
+	$(NPM) --prefix frontend ci --strict-peer-deps
+
+frontend-dev:  ## Serve the frontend on localhost:3000
+	$(NPM) --prefix frontend run dev
+
+frontend-lint:  ## Check frontend lint with zero warnings
+	$(NPM) --prefix frontend run lint
+
+frontend-typecheck:  ## Check strict frontend TypeScript
+	$(NPM) --prefix frontend run typecheck
+
+frontend-test:  ## Run frontend unit and component tests
+	$(NPM) --prefix frontend test
+
+frontend-build:  ## Build the frontend production assets
+	$(NPM) --prefix frontend run build
+
+frontend-check: frontend-lint frontend-test frontend-build  ## Run frontend checks and budgets
+	$(NPM) --prefix frontend run check:bundle
+	$(NPM) --prefix frontend run check:contrast
+
+frontend-e2e:  ## Run the browser flow against an isolated API and databases
+	$(NPM) --prefix frontend run test:e2e

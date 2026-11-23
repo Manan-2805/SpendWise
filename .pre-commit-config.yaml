@@ -57,3 +57,12 @@ repos:
         entry: make audit
         language: system
         pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: frontend-check
+        name: frontend check
+        entry: make frontend-check
+        language: system
+        files: ^frontend/
+        pass_filenames: false

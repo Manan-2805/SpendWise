@@ -1,8 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-// Run from any directory with: node frontend/check-palette-contrast.mjs
-const html = readFileSync(new URL('./design-preview.html', import.meta.url), 'utf8');
-const palettes = ['olive', 'clay', 'harbor'];
+const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const roles = { ink: 4.5, muted: 4.5, income: 4.5, expense: 4.5, focus: 3 };
 const rows = [];
 let failed = false;
@@ -28,25 +26,21 @@ function contrast(first, second) {
   return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 }
 
-for (const palette of palettes) {
-  for (const theme of ['light', 'dark']) {
-    const selector = `[data-palette="${palette}"][data-theme="${theme}"]`;
-    const css = html.split(`${selector} {`)[1]?.split('}')[0];
-    const values = Object.fromEntries(
-      [...(css ?? '').matchAll(/--([a-z]+): oklch\(([\d.]+) ([\d.]+) ([\d.]+)\);/g)]
-        .map(([, token, ...lch]) => [token, luminance(lch.map(Number), `${palette}/${theme}/${token}`)]),
-    );
-
-    for (const surface of ['canvas', 'surface']) {
-      const row = { palette, theme, surface };
-      for (const [role, minimum] of Object.entries(roles)) {
-        const ratio = contrast(values[surface], values[role]);
-        const passes = ratio >= minimum;
-        row[role] = `${ratio.toFixed(2)}${passes ? '' : ' FAIL'}`;
-        failed ||= !passes;
-      }
-      rows.push(row);
+for (const [theme, selector] of [['light', ':root'], ['dark', ':root.dark']]) {
+  const tokens = css.split(`${selector} {`)[1]?.split('}')[0];
+  const values = Object.fromEntries(
+    [...(tokens ?? '').matchAll(/--([a-z]+): oklch\(([\d.]+) ([\d.]+) ([\d.]+)\);/g)]
+      .map(([, token, ...lch]) => [token, luminance(lch.map(Number), `${theme}/${token}`)]),
+  );
+  for (const surface of ['canvas', 'surface']) {
+    const row = { theme, surface };
+    for (const [role, minimum] of Object.entries(roles)) {
+      const ratio = contrast(values[surface], values[role]);
+      const passes = ratio >= minimum;
+      row[role] = `${ratio.toFixed(2)}${passes ? '' : ' FAIL'}`;
+      failed ||= !passes;
     }
+    rows.push(row);
   }
 }
 

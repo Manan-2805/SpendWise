@@ -9,7 +9,7 @@ export const server = {
   strictPort: true,
   proxy: {
     '/api/v1': {
-      target: 'http://127.0.0.1:8000',
+      target: process.env.SPENDWISE_E2E_UPSTREAM ?? 'http://127.0.0.1:8000',
       changeOrigin: false,
     },
   },

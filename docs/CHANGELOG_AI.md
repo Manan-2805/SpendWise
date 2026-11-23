@@ -125,6 +125,42 @@ Resolved the proposed npm graph in memory, compared it with the public advisory 
 
 The shadcn button keeps its Radix Slot contract with CSS variants because the current source imports an unapproved variant helper. The two AnimateIcons adapters use typed callbacks and reduced-motion support. Other primitives are copied from the verified shadcn registry.
 
+### Steps 6–7 · Integration and quality
+
+| File | What changed | Why |
+|---|---|---|
+| `.env.example` | Documented the optional public currency flag | Make currency formatting discoverable |
+| `.github/workflows/ci.yml` | Excluded the new frontend-only hook from the existing backend job | Keep backend checks intact and avoid duplicating the path-filtered frontend job |
+| `.github/workflows/frontend.yml` | Added path-filtered build, tests, generation, audit and browser checks | Verify UI changes without changing the backend job |
+| `.pre-commit-config.yaml` | Registered the frontend gate for changes under frontend | Run the UI checks with standard commit hooks |
+| `Makefile` | Added frontend commands and included the frontend in production startup | Match the repository’s existing entry points |
+| `README.md` | Documented local use, checks, deployment and screenshots | Make the frontend operable and reviewable |
+| `docker-compose.prod.yml` | Added the nginx frontend service | Serve the production UI alongside the existing API |
+| `docker-compose.mailpit.yml` | Added an optional loopback-only Mailpit profile | Inspect development emails without starting it by default |
+| `docs/screenshots/frontend/dashboard-dark.png` | Captured the real dark dashboard | Show the approved dark design |
+| `docs/screenshots/frontend/dashboard-light.png` | Captured the real light dashboard | Show the approved light design |
+| `docs/screenshots/frontend/transactions-mobile.png` | Captured the real mobile transaction page | Show the responsive layout |
+| `frontend/.dockerignore` | Limited the Docker build inputs | Keep local settings and artifacts outside the build context |
+| `frontend/AGENTS.md` | Filled in the frontend commands | Preserve local contributor instructions |
+| `frontend/Dockerfile` | Added a pinned multi-stage non-root image | Build static assets and serve them with nginx |
+| `frontend/check-palette-contrast.mjs` | Removed the preview-only checker | Replace it with app-level contrast verification |
+| `frontend/design-preview.html` | Removed the approved temporary design preview | Use the implementation and screenshots for review |
+| `frontend/e2e/spendwise.spec.ts` | Added the real browser flow, axe and media checks | Verify login, expense creation, reporting and glass fallbacks |
+| `frontend/eslint.config.js` | Applied JavaScript rules to integration scripts | Check the full frontend toolchain |
+| `frontend/nginx.conf` | Added health, SPA fallback, asset caching and same-origin proxy rules | Preserve the public Host and real API responses |
+| `frontend/package.json` | Registered browser and bundle/contrast scripts | Provide repeatable quality commands |
+| `frontend/playwright.config.ts` | Configured the Chromium flow and strict server lifecycle | Run the browser against the isolated API and Vite |
+| `frontend/scripts/check-bundle.mjs` | Enforced gzip budgets from the build manifest | Keep chart code lazy and entry sizes bounded |
+| `frontend/scripts/check-contrast.mjs` | Measured the actual Harbor Ink tokens | Keep WCAG contrast checks after deleting the preview |
+| `frontend/scripts/e2e-backend.mjs` | Managed test database, API, browser and cleanup | Run integration without real dotenv files or development databases |
+| `frontend/src/lib/api/client.test.ts` | Added the staggered 401 test | Ensure a late response does not trigger another rotation |
+| `frontend/src/test/feature-flows.test.tsx` | Covered additional account flows | Verify password validation, reset, verification, logout and password change |
+| `frontend/tsconfig.node.json` | Typed DOM callbacks in Playwright | Keep strict typing for browser assertions |
+| `frontend/vite.config.ts` | Enabled an explicit disposable E2E upstream | Test the real API while keeping the normal proxy fixed |
+| `docs/CHANGELOG_AI.md` | Recorded integration and quality validation | Track files and reasons |
+
+Verified the production nginx proxy with an isolated HTTPS ingress and the real API, including exact-origin rejection and Secure HttpOnly cookie rotation. Verified verification and reset delivery through the optional Mailpit profile. The browser flow exercises axe and CSS transparency fallbacks. [Playwright CI](https://playwright.dev/docs/ci) · [Node setup](https://github.com/actions/setup-node/blob/v6/README.md) · [Compose teardown](https://docs.docker.com/reference/cli/docker/compose/down/)
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.

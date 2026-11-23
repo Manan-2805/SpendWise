@@ -38,6 +38,34 @@ describe('API transport', () => {
     expect(dispatched.mock.calls.some(([request]) => request instanceof Request && request.url === profile && request.credentials === 'include')).toBe(true)
   })
 
+  it('uses the completed recovery for a staggered 401', async () => {
+    let releaseSlow = () => {}
+    const slow = new Promise<void>(resolve => { releaseSlow = resolve })
+    let signedIn = false
+    let rotations = 0
+    server.use(
+      http.get(profile, async ({ request }) => {
+        const status = signedIn ? 200 : 401
+        if (status === 401 && new URL(request.url).searchParams.has('slow')) await slow
+        return new HttpResponse(null, { status })
+      }),
+      http.post(refresh, () => {
+        rotations++
+        signedIn = true
+        return new HttpResponse(null, { status: 200 })
+      }),
+    )
+    const transport = createApiTransport({ origin, expire })
+    const later = transport(new Request(profile + '?slow'))
+    try {
+      expect((await transport(new Request(profile))).status).toBe(200)
+    } finally {
+      releaseSlow()
+    }
+    expect((await later).status).toBe(200)
+    expect(rotations).toBe(1)
+  })
+
   it('checks the session inside the Web Lock and skips rotation when already valid', async () => {
     let locked = false
     let reads = 0
