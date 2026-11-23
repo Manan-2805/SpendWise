@@ -43,6 +43,16 @@ Contrast uses CSS Color 4 conversion and WCAG 2.2 thresholds. The preview uses a
 
 The user chose Harbor Ink, Barlow Condensed with Instrument Sans, and the Ledger mark. The app must show visibly translucent, blurred CSS glass on the nav, sheets, modals, and toasts. Include opaque fallback rules and verify the appearance in the browser in both themes. Tables and charts use solid surfaces. Remove the standalone preview and its preview-only checker after those design checks have an app-level replacement.
 
+### Step 4 · Implementation plan and registry verification
+
+| File | What changed | Why |
+|---|---|---|
+| `docs/plans/2026-11-23-frontend.md` | Added the architecture, endpoint matrix, ordered tasks, testing gates, and exact-pin verification | Establish the implementation and approval gates before scaffolding |
+| `docs/DEPENDENCY_CHANGES.md` | Marked the baseline conditionally approved and linked the transitive advisory proposal | Preserve the approval status without changing the direct pins |
+| `docs/CHANGELOG_AI.md` | Recorded Step 4 planning and verification | Track changes for the session |
+
+Resolved the proposed npm graph in memory, compared it with the public advisory feed, and verified a scoped minimatch override as a proposal only. No package or image was installed. [npm audit](https://docs.npmjs.com/cli/v10/commands/npm-audit/#bulk-advisory-endpoint) · [minimatch advisory](https://github.com/advisories/GHSA-g3hv-75wg-m249)
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.

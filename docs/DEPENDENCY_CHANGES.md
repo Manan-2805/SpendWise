@@ -3,7 +3,7 @@ Every package add, upgrade, or removal: package, version, why, approved by me (d
 
 ## 2026-11-23 · SpendWise frontend foundation proposal
 
-Status **pending approval as one batch**. This section proposes exact direct versions and their resolved transitive dependencies. No package was installed or added to a manifest. The build will lock the approved versions with npm and report any additional direct dependency before adding it. Existing Python dependencies are unaffected.
+Status **conditionally approved as one baseline batch on 2026-11-23**. No package was installed or added to a manifest. Step 4 reverified all exact pins, engines, required peers, and the selected shadcn and AnimateIcons dependencies. The [implementation plan](plans/2026-11-23-frontend.md#dependency-verification) records the registry audit, one moderate transitive advisory, and the proposed scoped `minimatch@11.0.9` override, which awaits explicit approval. The build will lock the approved versions with npm and report any additional direct dependency before adding it. Existing Python dependencies are unaffected.
 
 ### Application dependencies
 
