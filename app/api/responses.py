@@ -1,8 +1,31 @@
+from typing import Any, Literal
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.exceptions import OverloadedError
+
+
+class OverloadPayload(BaseModel):
+    detail: str
+    code: Literal["OVERLOADED"]
+    request_id: str | None
+
+
+OVERLOAD_RESPONSES: dict[int | str, dict[str, Any]] = {
+    503: {
+        "description": "The API is temporarily at capacity.",
+        "model": OverloadPayload,
+        "headers": {
+            "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {"type": "integer", "minimum": 1},
+            },
+        },
+    },
+}
 
 
 def overload_response(request: Request) -> JSONResponse:

@@ -75,6 +75,21 @@ SQLAlchemy uses `pool_timeout` for checkout waits and raises its `TimeoutError` 
 | `tests/unit/test_auth_service.py` | Verify request cancellation retains the slot until hashing finishes | Bound background hashing under disconnects |
 | `docs/CHANGELOG_AI.md` | Record login changes | Track the implementation |
 
+### Task 5 · Admission and OpenAPI
+
+| File | What changed | Why |
+|---|---|---|
+| `app/middleware/overload.py`, `app/main.py` | Limit per-worker in-flight requests ahead of rate limiting and preserve probe paths | Shed excess requests promptly |
+| `app/api/responses.py`, `app/api/v1/router.py` | Declare the overload payload, response code, and retry header in OpenAPI | Let generated clients handle overload |
+| `app/core/config.py`, `docker-compose.yml`, `docker-compose.prod.yml` | Expose admission, health, login, pool and transport settings | Tune the limits for each deployment |
+| `scripts/run_capacity_test.py` | Record rejection p95 and the effective admission setting | Compare the candidate limits |
+| `tests/unit/test_overload.py` | Test slot release, health bypass, and OpenAPI | Protect runtime and client behavior |
+| `docs/capacity.md` | Record the admission sweep and its issuance limits | Show the basis for selecting a default |
+| `docs/plans/2026-11-23-overload.md` | Record the approved sweep, OpenAPI and approval gate updates | Align the staged plan with the approved scope |
+| `docs/CHANGELOG_AI.md` | Record admission and schema changes | Track the implementation |
+
+FastAPI merges router responses into the generated schema. [Additional Responses in OpenAPI](https://fastapi.tiangolo.com/advanced/additional-responses/)
+
 ## 2026-11-22 — `codex/audit-and-fixes`
 
 Resolve the audit's runtime and release findings, verify Make targets, and publish evidence in the README. Google OAuth implementation and licensing were deferred at the user's request.

@@ -27,6 +27,7 @@ from app.core.tracing import setup_tracing
 from app.db.session import engine
 from app.middleware.correlation import CorrelationIDMiddleware
 from app.middleware.logging import RequestLoggingMiddleware
+from app.middleware.overload import AdmissionMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.timing import RequestTimingMiddleware
 
@@ -72,6 +73,15 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
 
+    application.state.limiter = limiter
+    application.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)  # type: ignore[arg-type]
+    application.add_middleware(SlowAPIMiddleware)
+    application.add_middleware(
+        AdmissionMiddleware,
+        limit=settings.MAX_IN_FLIGHT_REQUESTS,
+        api_prefix=settings.API_V1_PREFIX,
+    )
+
     # CORS configuration
     application.add_middleware(
         CORSMiddleware,
@@ -93,11 +103,6 @@ def create_application() -> FastAPI:
             TrustedHostMiddleware,
             allowed_hosts=[*settings.TRUSTED_HOSTS, "localhost", "127.0.0.1"],
         )
-
-    # Rate Limiting configuration
-    application.state.limiter = limiter
-    application.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)  # type: ignore[arg-type]
-    application.add_middleware(SlowAPIMiddleware)
 
     # Metrics instrumentation
     Instrumentator().instrument(application).expose(

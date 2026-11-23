@@ -30,6 +30,7 @@ class Settings(BaseSettings):
         default=0.25, gt=0, allow_inf_nan=False
     )
     OVERLOAD_RETRY_AFTER_SECONDS: int = Field(default=1, gt=0)
+    MAX_IN_FLIGHT_REQUESTS: int = Field(default=16, gt=0)
     LOGIN_BCRYPT_CONCURRENCY: int = Field(default=1, gt=0)
     READINESS_INTERVAL_SECONDS: float = Field(default=2, gt=0)
     READINESS_TIMEOUT_SECONDS: float = Field(default=0.2, gt=0)

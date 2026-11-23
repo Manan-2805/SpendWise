@@ -161,6 +161,7 @@ async def measure(rate, seconds, base_url, identities, api_pid, celery_pid):
     probes: dict[str, Counter[str]] = defaultdict(Counter)
     pending: set[asyncio.Task] = set()
     cpu_ticks: Counter[str] = Counter()
+    shed_latencies: list[float] = []
     earlier = process_ticks(api_pid, celery_pid)
     issued = 0
     fast_rejections = 0
@@ -199,7 +200,10 @@ async def measure(rate, seconds, base_url, identities, api_pid, celery_pid):
             pass
         except httpx.TransportError:
             status = "transport_error"
-        latencies[operation].append((perf_counter() - scheduled) * 1000)
+        elapsed_ms = (perf_counter() - scheduled) * 1000
+        if status == "503":
+            shed_latencies.append(elapsed_ms)
+        latencies[operation].append(elapsed_ms)
         statuses[status] += 1
 
     async def probe(path, scheduled):
@@ -297,6 +301,7 @@ async def measure(rate, seconds, base_url, identities, api_pid, celery_pid):
         and min(live_pct, ready_pct) >= 98,
         "status_counts": dict(statuses),
         "retry_after_503s": fast_rejections,
+        "shed_p95_ms": percentile(shed_latencies),
         "probes": {path: dict(counts) for path, counts in probes.items()},
         "operations": {
             key: {"n": len(values), "p95_ms": percentile(values)}
@@ -323,6 +328,8 @@ async def main() -> None:
     env = local_environment()
     os.environ.update(env)
     identities = await accounts(max(args.rates))
+    from app.core.config import settings
+
     bin_dir = Path(sys.executable).parent
     base_url = f"http://127.0.0.1:{args.port}/api/v1"
     celery_command = [
@@ -361,7 +368,12 @@ async def main() -> None:
     ]
     print(
         json.dumps(
-            {"seconds": args.seconds, "granian_workers": WORKERS, "celery_workers": 2}
+            {
+                "seconds": args.seconds,
+                "granian_workers": WORKERS,
+                "celery_workers": 2,
+                "max_in_flight_per_worker": settings.MAX_IN_FLIGHT_REQUESTS,
+            }
         ),
         flush=True,
     )
