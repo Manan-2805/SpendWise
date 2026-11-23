@@ -169,6 +169,7 @@ The app covers account entry, email verification and password reset, monthly rep
 - Export typed API changes with `make openapi` and `npm --prefix frontend run api:generate`. The [runtime API contract](docs/api-contract.md) documents errors and session behavior.
 - For development email, run `docker compose -f docker-compose.mailpit.yml --profile mailpit up -d mailpit` and open http://localhost:8025. Start the local worker with SMTP host `127.0.0.1`, port `1025`, a local sender, `SMTP_STARTTLS=false`, and an empty username. The standard development command leaves Mailpit disabled.
 - The production Compose file includes the frontend nginx service. Serve it through a public HTTPS ingress that preserves the public Host. Supply `SPENDWISE_FRONTEND_URL` and set `SPENDWISE_CORS_ORIGINS` to an array with exactly that HTTPS origin at deployment. Keep deployment values out of Git. nginx serves SPA routes and proxies API paths on the same origin.
+- Resolve the [nginx runtime image audit findings](docs/DEPENDENCY_CHANGES.md#production-image-audit--remediation-pending-approval) before production deployment.
 
 ### Screenshots
 

@@ -161,6 +161,14 @@ The shadcn button keeps its Radix Slot contract with CSS variants because the cu
 
 Verified the production nginx proxy with an isolated HTTPS ingress and the real API, including exact-origin rejection and Secure HttpOnly cookie rotation. Verified verification and reset delivery through the optional Mailpit profile. The browser flow exercises axe and CSS transparency fallbacks. [Playwright CI](https://playwright.dev/docs/ci) · [Node setup](https://github.com/actions/setup-node/blob/v6/README.md) · [Compose teardown](https://docs.docker.com/reference/cli/docker/compose/down/)
 
+### Step 7 · Production image audit follow-up
+
+| File | What changed | Why |
+|---|---|---|
+| `docs/DEPENDENCY_CHANGES.md` | Recorded the nginx OS advisory findings and approval-gated package changes | Keep the image release blocker separate from the passing npm audit |
+| `README.md` | Linked the production release blocker | Surface the required remediation before deployment |
+| `docs/CHANGELOG_AI.md` | Recorded the follow-up | Track the release decision |
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.

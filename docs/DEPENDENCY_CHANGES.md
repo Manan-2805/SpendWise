@@ -66,6 +66,19 @@ Use Node `22.23.5` and npm `10.9.9`, already available locally. The current Vite
 
 Package versions and peer ranges were checked against the npm registry and the selected component registry. [Vite template and CLI](https://github.com/vitejs/vite/tree/main/packages/create-vite) · [shadcn class utility](https://ui.shadcn.com/docs/changelog/2026-09-cn) · [shadcn chart registry](https://ui.shadcn.com/r/styles/new-york-v4/chart.json) · [AnimateIcons](https://animateicons.in/) · [OpenAPI TypeScript npm metadata](https://registry.npmjs.org/openapi-typescript/7.13.0) · [Node image tags](https://github.com/docker-library/official-images/blob/master/library/node) · [nginx image tags](https://github.com/docker-library/official-images/blob/master/library/nginx) · [Mailpit release](https://github.com/axllent/mailpit/releases/tag/v1.34.0)
 
+### Production image audit · remediation pending approval
+
+Docker Scout indexed the built frontend image and reported four affected Alpine packages across 18 findings (one critical, six high, six medium, five low). The npm audit is tracked separately and returned zero vulnerabilities. Release the nginx image after an approved OS dependency update and a clean high/critical rescan. [Docker Scout scan](https://docs.docker.com/reference/cli/docker/scout/cves/) · [Alpine 3.24 security data](https://secdb.alpinelinux.org/v3.24/main.json)
+
+| Alpine package | Current | First fix reported by Scout | Proposed action |
+|---|---|---|---|
+| `zlib` | `1.3.2-r1` | `1.4-r0` | Upgrade the runtime package to resolve the critical finding |
+| `openssl` | `3.5.9-r0` | `3.5.9-r1` | Upgrade the OpenSSL runtime packages to resolve four high and one medium findings |
+| `musl` | `1.2.6-r3` | `1.2.6-r6` | The configured Alpine 3.24 repository exposed only `1.2.6-r3` during the check. Evaluate a patched nginx base or wait for the configured repository to publish the fix. |
+| `libxml2` | `2.13.9-r2` | No fix reported for the high finding | Validate removing the unused `nginx-module-xslt` and `nginx-module-njs` packages, which depend on this library. Verify it drops out of the runtime graph and rerun the proxy smoke test. |
+
+These OS package changes and removals are proposals. Keep the approved image pin until the remediation is approved and validated.
+
 ## 2026-11-22 — Targeted security upgrades
 
 The user approved upgrading dependencies reported by pip-audit and compatibility dependencies. The first scan reported 99 advisory entries across 17 packages. The post-upgrade scan reported no known vulnerabilities in the installed dependencies. The local SpendWise package is outside the advisory feed.
