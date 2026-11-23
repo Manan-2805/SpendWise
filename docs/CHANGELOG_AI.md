@@ -14,6 +14,16 @@ Step 0 · Discover and document the API contract for the SpendWise frontend.
 
 The export uses the FastAPI schema method and runs with uv environment sync disabled. The production origin note follows the pinned Granian 2.7.5 runtime probe and Granian's documented proxy behavior. Docker Compose was run with its default environment-file loading disabled. [FastAPI schema generation](https://fastapi.tiangolo.com/how-to/extending-openapi/) · [uv CLI options](https://docs.astral.sh/uv/reference/cli/#uv-run--no-sync) · [Granian proxy handling](https://github.com/emmett-framework/granian/blob/master/README.md#proxies-and-forwarded-headers) · [Compose environment-file handling](https://docs.docker.com/compose/how-tos/environment-variables/envvars/#compose_disable_env_file)
 
+### Step 1 · Research and origin allowlist regression
+
+| File | What changed | Why |
+|---|---|---|
+| `tests/integration/test_api/test_persistence.py` | Tested an allowed HTTPS origin and a foreign HTTPS origin with a configured cookie origin allowlist | Verify the approved production configuration accepts only the expected origin in this deployment case |
+| `docs/api-contract.md` | Documented deploy-time origin configuration, nginx Host forwarding, the Granian wrapper alternative, and the two follow-ups | Record the deployment decision and preserve deferred work |
+| `docs/CHANGELOG_AI.md` | Recorded the regression test and documentation updates | Track Step 1 changes |
+
+Forwarded-header behavior was checked against the installed Granian 2.7.5 wrapper and the upstream docs. [Granian proxy handling](https://github.com/emmett-framework/granian/blob/master/README.md#proxies-and-forwarded-headers) · [nginx proxy headers](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_set_header)
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.

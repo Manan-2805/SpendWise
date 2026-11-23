@@ -50,7 +50,9 @@ On cookie-authenticated writes, including cookie refresh, `Origin` must exactly 
 
 Use Vite on port `3000` with `strictPort: true`. Proxy `/api/v1` to `127.0.0.1:8000` and preserve the browser `Host`, so `http://localhost:3000` matches the origin FastAPI sees. `http://localhost:3000` is rejected when sent directly to `http://127.0.0.1:8000` with default settings, as is an unrelated origin. The Vite setup needs no backend configuration change.
 
-For production nginx terminating TLS and forwarding HTTP, the current Granian entry point leaves the API's request scheme as HTTP even with `X-Forwarded-Proto: https`. Cookie-authenticated writes and refresh then return `403` for the public HTTPS origin with an empty allowlist. The minimal production configuration is to set `SPENDWISE_CORS_ORIGINS` to a JSON array containing the exact public HTTPS frontend origin. The browser still uses same-origin URLs. An alternative is a deployment that preserves the HTTPS scheme at the API. The production Compose file already requires `SPENDWISE_FRONTEND_URL`. Any change to the backend origin allowlist, email URL, or SMTP configuration requires approval. [Granian proxy documentation](https://github.com/emmett-framework/granian/blob/master/README.md#proxies-and-forwarded-headers)
+For production nginx terminating TLS and forwarding HTTP, the current Granian entry point leaves the API's request scheme as HTTP even with `X-Forwarded-Proto: https`. Cookie-authenticated writes and refresh then return `403` for the public HTTPS origin with an empty allowlist. Use the approved deploy-time `SPENDWISE_CORS_ORIGINS` setting as a JSON array containing exactly the public HTTPS frontend origin. Keep the value outside Git and use no wildcard. nginx must forward the public `Host` header. The browser still uses same-origin URLs. The production Compose file already requires `SPENDWISE_FRONTEND_URL`. [nginx proxy headers](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_set_header)
+
+Granian 2.7.5 can recognize the public scheme through `wrap_asgi_with_proxy_headers` with an explicit trusted nginx address or network. Its wrapper requires a usable `X-Forwarded-For` value to apply `X-Forwarded-Proto`. This would require configuring a wrapped ASGI entry point and the proxy's trusted address. The exact origin allowlist is simpler and requires no server command change. [Granian proxy documentation](https://github.com/emmett-framework/granian/blob/master/README.md#proxies-and-forwarded-headers)
 
 ## Refresh and sign-out
 
@@ -103,6 +105,11 @@ The limiter uses client address and fixed windows. The default is 200/minute. Au
 - OpenAPI describes `Retry-After` on overload `503` responses. Readiness can return a separate `503` without `Retry-After`, and its current schema only documents `200`.
 - The schema advertises bearer security and points its OAuth token URL at login. Browser cookie auth is supported and login takes JSON.
 
+## Follow-ups
+
+- Disable dotenv loading in the normal test entry points, including the pre-commit test hook, so local environment files cannot affect test runs.
+- Reconcile the generated OpenAPI documentation with the runtime gaps listed above. Preserve existing behavior, including the current header behavior for `429` and readiness `503`.
+
 ## Screen gap table
 
 | Screen | Endpoints needed | Status |
@@ -119,4 +126,4 @@ The limiter uses client address and fixed windows. The default is 200/minute. Au
 
 ### Verification
 
-The existing integration tests cover refresh rotation and concurrent reuse, cookie origin rejection, email verification and reset, rate limiting, and overload. Disposable contract probes checked the origin matrix against Granian, both development cookies over HTTP, the category page limit, unverified-user access, transaction field validation and nullable responses, and the email-change response and subsequent login. A response-header test exercised the production branch of the cookie writer. SMTP delivery and the future nginx deployment were outside these checks.
+The integration tests cover refresh rotation and concurrent reuse, cookie origin rejection with and without an explicit origin allowlist, email verification and reset, rate limiting, and overload. Disposable contract probes checked the origin matrix against Granian, both development cookies over HTTP, the category page limit, unverified-user access, transaction field validation and nullable responses, and the email-change response and subsequent login. A response-header test exercised the production branch of the cookie writer. SMTP delivery and the future nginx deployment were outside these checks.
