@@ -69,6 +69,14 @@ smoke:  ## Check local API liveness and readiness
 	curl --fail-with-body -sS http://127.0.0.1:8000/api/v1/health/live
 	curl --fail-with-body -sS http://127.0.0.1:8000/api/v1/health/ready
 
+.PHONY: openapi
+openapi:  ## Export the canonical API schema without starting services
+	@cd docs && test ! -e .env && env -i PATH="$$PATH" PYTHONPATH=.. \
+		DATABASE_URL=postgresql://127.0.0.1/spendwise_schema \
+		REDIS_URL=redis://127.0.0.1/0 CELERY_BROKER_URL=redis://127.0.0.1/1 \
+		CELERY_RESULT_BACKEND=redis://127.0.0.1/2 SECRET_KEY=schema-placeholder \
+		$(UV) --no-cache run --no-sync python -B -c 'import json; from pathlib import Path; from app.main import app; Path("openapi.json").write_text(json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n", encoding="utf-8")'
+
 worker: prepare-dev  ## Start the local Celery worker
 	@$(DEV_SETTINGS) $(UV) run celery -A app.worker.celery_app worker --loglevel=info
 

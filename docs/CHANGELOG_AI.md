@@ -1,6 +1,19 @@
 # AI change log
 Every change made by an AI agent: file, what, why. Newest session first.
 
+## 2026-11-23 — `codex/20261123-frontend`
+
+Step 0 · Discover and document the API contract for the SpendWise frontend.
+
+| File | What changed | Why |
+|---|---|---|
+| `Makefile` | Added `make openapi` to call `app.openapi()` with isolated placeholder settings and write sorted JSON | Export a repeatable schema without starting services or reading project environment files |
+| `docs/openapi.json` | Recorded the canonical OpenAPI 3.1 export | Provide the input for future client generation |
+| `docs/api-contract.md` | Documented browser auth, data shapes, runtime errors, and screen coverage with the verified proxy and email behavior | Give the frontend runtime details missing from the generated schema |
+| `docs/CHANGELOG_AI.md` | Recorded the contract discovery changes | Track the files and reasons for this session |
+
+The export uses the FastAPI schema method and runs with uv environment sync disabled. The production origin note follows the pinned Granian 2.7.5 runtime probe and Granian's documented proxy behavior. Docker Compose was run with its default environment-file loading disabled. [FastAPI schema generation](https://fastapi.tiangolo.com/how-to/extending-openapi/) · [uv CLI options](https://docs.astral.sh/uv/reference/cli/#uv-run--no-sync) · [Granian proxy handling](https://github.com/emmett-framework/granian/blob/master/README.md#proxies-and-forwarded-headers) · [Compose environment-file handling](https://docs.docker.com/compose/how-tos/environment-variables/envvars/#compose_disable_env_file)
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.
