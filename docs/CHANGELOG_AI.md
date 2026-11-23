@@ -34,6 +34,15 @@ Forwarded-header behavior was checked against the installed Granian 2.7.5 wrappe
 
 Contrast uses CSS Color 4 conversion and WCAG 2.2 thresholds. The preview uses an opaque glass fallback and embeds SIL Open Font License subsets. Application font packages await Step 3 approval. A disposable plain SMTP listener on port 1025 accepted the existing worker's verification email with `SMTP_STARTTLS=false` and an empty `SMTP_USERNAME`. Mailpit and backend configuration work are deferred to integration. [CSS Color 4](https://www.w3.org/TR/css-color-4/#color-conversion-code) · [WCAG text contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) · [WCAG non-text contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html) · [Reduced transparency](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@media/prefers-reduced-transparency) · [Fontsource](https://fontsource.org/docs/getting-started/cdn) · [Mailpit SMTP](https://mailpit.axllent.org/docs/configuration/smtp/)
 
+### Step 3 · Dependency proposal and design selection
+
+| File | What changed | Why |
+|---|---|---|
+| `docs/DEPENDENCY_CHANGES.md` | Proposed one pinned approval batch for the app, generator, tests, and integration images | Make every new direct dependency and version explicit before installing |
+| `docs/CHANGELOG_AI.md` | Recorded the selected design and its acceptance conditions | Preserve the design decisions through planning and implementation |
+
+The user chose Harbor Ink, Barlow Condensed with Instrument Sans, and the Ledger mark. The app must show visibly translucent, blurred CSS glass on the nav, sheets, modals, and toasts. Include opaque fallback rules and verify the appearance in the browser in both themes. Tables and charts use solid surfaces. Remove the standalone preview and its preview-only checker after those design checks have an app-level replacement.
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.
