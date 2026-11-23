@@ -72,7 +72,7 @@ async def login(
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("User-Agent")
 
-    access_token, refresh_token, _ = await auth_service.authenticate(
+    access_token, refresh_token, _ = await auth_service.login(
         data.email, data.password, ip_address=ip_address, user_agent=user_agent
     )
 

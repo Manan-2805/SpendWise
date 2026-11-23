@@ -1,15 +1,19 @@
 import asyncio
 import secrets
 import string
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import (
     InactiveUserError,
     InvalidCredentialsError,
     InvalidTokenError,
+    OverloadedError,
 )
 from app.core.security import (
     create_access_token,
@@ -27,6 +31,34 @@ from app.services.audit import AuditService
 from app.services.user import UserService
 
 logger = structlog.get_logger()
+_login_slots = asyncio.Semaphore(settings.LOGIN_BCRYPT_CONCURRENCY)
+_DUMMY_HASH = "$2b$12$KM/voy8TSax1XOEtR6/dOufvPnHAFSNSg99mLyVAHh8D4cG7Y0og2"
+
+
+@dataclass(frozen=True)
+class Credentials:
+    user_id: int
+    hashed_password: str | None
+    is_active: bool
+
+
+async def verify_in_thread(password: str, hashed_password: str) -> bool:
+    return await asyncio.to_thread(verify_password, password, hashed_password)
+
+
+async def verify_login_password(password: str, hashed_password: str) -> bool:
+    slots = _login_slots
+    if slots.locked():
+        raise OverloadedError()
+    await slots.acquire()
+
+    async def check() -> bool:
+        try:
+            return await verify_in_thread(password, hashed_password)
+        finally:
+            slots.release()
+
+    return await asyncio.shield(check())
 
 
 class AuthService:
@@ -48,17 +80,43 @@ class AuthService:
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> tuple[str, str, User]:
-        """
-        Verify credentials, issue access/refresh token family, audit results.
-        """
-        user = await self.user_service.repo.get_by_email(email)
+        """Verify and issue tokens within the caller's registration transaction."""
+        credentials = await self._lookup_credentials(email)
+        return await self._verify_and_issue(
+            credentials, email, password, verify_in_thread, ip_address, user_agent
+        )
 
-        if not user:
-            await asyncio.to_thread(
-                verify_password,
-                password,
-                "$2b$12$KM/voy8TSax1XOEtR6/dOufvPnHAFSNSg99mLyVAHh8D4cG7Y0og2",
-            )
+    async def login(
+        self,
+        email: str,
+        password: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> tuple[str, str, User]:
+        """Use the login request's read transaction to take a credential snapshot."""
+        credentials = await self._lookup_credentials(email)
+        await self.db.rollback()
+        return await self._verify_and_issue(
+            credentials, email, password, verify_login_password, ip_address, user_agent
+        )
+
+    async def _lookup_credentials(self, email: str) -> Credentials | None:
+        user = await self.user_service.repo.get_by_email(email)
+        if user is None:
+            return None
+        return Credentials(user.id, user.hashed_password, user.is_active)
+
+    async def _verify_and_issue(
+        self,
+        credentials: Credentials | None,
+        email: str,
+        password: str,
+        verify: Callable[[str, str], Awaitable[bool]],
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> tuple[str, str, User]:
+        if credentials is None:
+            await verify(password, _DUMMY_HASH)
             await self.audit_service.log_action(
                 action="LOGIN_FAILED",
                 resource_type="User",
@@ -67,37 +125,36 @@ class AuthService:
             )
             raise InvalidCredentialsError()
 
-        if not user.hashed_password or not await asyncio.to_thread(
-            verify_password, password, user.hashed_password
-        ):
+        user_id = credentials.user_id
+        checked_hash = credentials.hashed_password
+        if not checked_hash or not await verify(password, checked_hash):
             await self.audit_service.log_action(
                 action="LOGIN_FAILED",
                 resource_type="User",
-                resource_id=user.id,
-                user_id=user.id,
+                resource_id=user_id,
+                user_id=user_id,
                 new_values={"reason": "invalid_password"},
             )
             raise InvalidCredentialsError()
 
-        if not user.is_active:
+        if not credentials.is_active:
             raise InactiveUserError()
 
-        checked_hash = user.hashed_password
-        active_user = await self.auth_repo.lock_active_user(user.id)
+        active_user = await self.auth_repo.lock_active_user(user_id)
         if not active_user or active_user.hashed_password != checked_hash:
             raise InvalidCredentialsError()
 
         access_token = create_access_token(
-            subject=user.id, auth_version=active_user.auth_version or 0
+            subject=user_id, auth_version=active_user.auth_version or 0
         )
-        refresh_token, jti = create_refresh_token(subject=user.id)
+        refresh_token, jti = create_refresh_token(subject=user_id)
 
         token_hash = hash_refresh_token(refresh_token)
         payload = verify_token(refresh_token, expected_type="refresh")
         expires_at = datetime.fromtimestamp(payload["exp"], tz=UTC)
 
         await self.auth_repo.create_refresh_token(
-            user_id=user.id,
+            user_id=user_id,
             jti=jti,
             family_id=jti,
             token_hash=token_hash,
@@ -109,10 +166,10 @@ class AuthService:
         await self.audit_service.log_action(
             action="LOGIN_SUCCESS",
             resource_type="User",
-            resource_id=user.id,
-            user_id=user.id,
+            resource_id=user_id,
+            user_id=user_id,
         )
-        return access_token, refresh_token, user
+        return access_token, refresh_token, active_user
 
     async def refresh_tokens(
         self,

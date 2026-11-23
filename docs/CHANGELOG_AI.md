@@ -65,6 +65,16 @@ Readiness uses async Redis clients with short timeouts and cancellation. [redis-
 
 SQLAlchemy uses `pool_timeout` for checkout waits and raises its `TimeoutError` when the pool is exhausted. [SQLAlchemy engine configuration](https://docs.sqlalchemy.org/en/20/core/engines.html#sqlalchemy.create_engine.params.pool_timeout) · [SQLAlchemy core exceptions](https://docs.sqlalchemy.org/en/20/core/exceptions.html#sqlalchemy.exc.TimeoutError)
 
+### Task 4 · Login bcrypt and checkout limits
+
+| File | What changed | Why |
+|---|---|---|
+| `app/api/v1/endpoints/auth.py`, `app/services/auth.py` | Snapshot credentials, end the login read transaction, and recheck credentials under lock before issuing tokens | Release the connection during bcrypt and handle credential changes safely |
+| `app/core/config.py` | Set a per-worker verification capacity | Bound CPU use by concurrent login checks |
+| `tests/integration/test_api/test_auth.py` | Hold bcrypt open and verify checkout release, saturation, and account races | Exercise the request path against a real pool |
+| `tests/unit/test_auth_service.py` | Verify request cancellation retains the slot until hashing finishes | Bound background hashing under disconnects |
+| `docs/CHANGELOG_AI.md` | Record login changes | Track the implementation |
+
 ## 2026-11-22 — `codex/audit-and-fixes`
 
 Resolve the audit's runtime and release findings, verify Make targets, and publish evidence in the README. Google OAuth implementation and licensing were deferred at the user's request.
