@@ -1,6 +1,203 @@
 # AI change log
 Every change made by an AI agent: file, what, why. Newest session first.
 
+## 2026-11-23 — `codex/20261123-frontend`
+
+Step 0 · Discover and document the API contract for the SpendWise frontend.
+
+| File | What changed | Why |
+|---|---|---|
+| `Makefile` | Added `make openapi` to call `app.openapi()` with isolated placeholder settings and write sorted JSON | Export a repeatable schema without starting services or reading project environment files |
+| `docs/openapi.json` | Recorded the canonical OpenAPI 3.1 export | Provide the input for future client generation |
+| `docs/api-contract.md` | Documented browser auth, data shapes, runtime errors, and screen coverage with the verified proxy and email behavior | Give the frontend runtime details missing from the generated schema |
+| `docs/CHANGELOG_AI.md` | Recorded the contract discovery changes | Track the files and reasons for this session |
+
+The export uses the FastAPI schema method and runs with uv environment sync disabled. The production origin note follows the pinned Granian 2.7.5 runtime probe and Granian's documented proxy behavior. Docker Compose was run with its default environment-file loading disabled. [FastAPI schema generation](https://fastapi.tiangolo.com/how-to/extending-openapi/) · [uv CLI options](https://docs.astral.sh/uv/reference/cli/#uv-run--no-sync) · [Granian proxy handling](https://github.com/emmett-framework/granian/blob/master/README.md#proxies-and-forwarded-headers) · [Compose environment-file handling](https://docs.docker.com/compose/how-tos/environment-variables/envvars/#compose_disable_env_file)
+
+### Step 1 · Research and origin allowlist regression
+
+| File | What changed | Why |
+|---|---|---|
+| `tests/integration/test_api/test_persistence.py` | Tested an allowed HTTPS origin and a foreign HTTPS origin with a configured cookie origin allowlist | Verify the approved production configuration accepts only the expected origin in this deployment case |
+| `docs/api-contract.md` | Documented deploy-time origin configuration, nginx Host forwarding, the Granian wrapper alternative, and the two follow-ups | Record the deployment decision and preserve deferred work |
+| `docs/CHANGELOG_AI.md` | Recorded the regression test and documentation updates | Track Step 1 changes |
+
+Forwarded-header behavior was checked against the installed Granian 2.7.5 wrapper and the upstream docs. [Granian proxy handling](https://github.com/emmett-framework/granian/blob/master/README.md#proxies-and-forwarded-headers) · [nginx proxy headers](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_set_header)
+
+### Step 2 · Design brief
+
+| File | What changed | Why |
+|---|---|---|
+| `frontend/design-preview.html` | Added a standalone dashboard, form and toast sample with three OKLCH palettes, two themes, embedded Fontsource preview subsets and three SVG marks | Compare the visual directions, typography, and icon choices offline before scaffolding |
+| `frontend/check-palette-contrast.mjs` | Added dependency-free contrast measurements for five roles on both surfaces in each theme | Verify the actual preview tokens against WCAG AA and reject out-of-sRGB values |
+| `docs/CHANGELOG_AI.md` | Recorded the design deliverables and compatibility checks | Track Step 2 changes and sources |
+
+Contrast uses CSS Color 4 conversion and WCAG 2.2 thresholds. The preview uses an opaque glass fallback and embeds SIL Open Font License subsets. Application font packages await Step 3 approval. A disposable plain SMTP listener on port 1025 accepted the existing worker's verification email with `SMTP_STARTTLS=false` and an empty `SMTP_USERNAME`. Mailpit and backend configuration work are deferred to integration. [CSS Color 4](https://www.w3.org/TR/css-color-4/#color-conversion-code) · [WCAG text contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) · [WCAG non-text contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html) · [Reduced transparency](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@media/prefers-reduced-transparency) · [Fontsource](https://fontsource.org/docs/getting-started/cdn) · [Mailpit SMTP](https://mailpit.axllent.org/docs/configuration/smtp/)
+
+### Step 3 · Dependency proposal and design selection
+
+| File | What changed | Why |
+|---|---|---|
+| `docs/DEPENDENCY_CHANGES.md` | Proposed one pinned approval batch for the app, generator, tests, and integration images | Make every new direct dependency and version explicit before installing |
+| `docs/CHANGELOG_AI.md` | Recorded the selected design and its acceptance conditions | Preserve the design decisions through planning and implementation |
+
+The user chose Harbor Ink, Barlow Condensed with Instrument Sans, and the Ledger mark. The app must show visibly translucent, blurred CSS glass on the nav, sheets, modals, and toasts. Include opaque fallback rules and verify the appearance in the browser in both themes. Tables and charts use solid surfaces. Remove the standalone preview and its preview-only checker after those design checks have an app-level replacement.
+
+### Step 4 · Implementation plan and registry verification
+
+| File | What changed | Why |
+|---|---|---|
+| `docs/plans/2026-11-23-frontend.md` | Added the architecture, endpoint matrix, ordered tasks, testing gates, and exact-pin verification | Establish the implementation and approval gates before scaffolding |
+| `docs/DEPENDENCY_CHANGES.md` | Marked the baseline conditionally approved and linked the transitive advisory proposal | Preserve the approval status without changing the direct pins |
+| `docs/CHANGELOG_AI.md` | Recorded Step 4 planning and verification | Track changes for the session |
+
+Resolved the proposed npm graph in memory, compared it with the public advisory feed, and verified a scoped minimatch override as a proposal only. No package or image was installed. [npm audit](https://docs.npmjs.com/cli/v10/commands/npm-audit/#bulk-advisory-endpoint) · [minimatch advisory](https://github.com/advisories/GHSA-g3hv-75wg-m249)
+
+### Step 5 · Foundation
+
+| File | What changed | Why |
+|---|---|---|
+| `docs/DEPENDENCY_CHANGES.md` | Recorded the approved npm graph and scoped override | Keep package approval and verification traceable |
+| `frontend/.gitignore` | Ignored generated output and local settings | Keep builds and developer values out of Git |
+| `frontend/package.json` | Pinned the approved packages and commands | Provide a reproducible frontend toolchain |
+| `frontend/package-lock.json` | Locked the audited npm graph | Install the same dependencies in CI and Docker |
+| `frontend/index.html` | Added the SPA entry and referrer policy | Mount the browser app without forwarding link tokens |
+| `frontend/vite.config.ts` | Configured Vite and Vitest with a strict same-origin proxy | Run and test the SPA on the required port |
+| `frontend/eslint.config.js` | Configured React and strict TypeScript linting | Catch frontend mistakes with zero warnings |
+| `frontend/tsconfig.json` | Added the Vite project references | Build both TypeScript configurations |
+| `frontend/tsconfig.app.json` | Enabled strict browser and test typing | Check application code before bundling |
+| `frontend/tsconfig.node.json` | Enabled strict tooling and browser runner typing | Check configuration and E2E code |
+| `frontend/public/favicon.svg` | Added the Ledger browser icon | Apply the approved brand |
+| `frontend/public/ledger.svg` | Added the Ledger mark | Apply the approved brand |
+| `frontend/src/app/Brand.tsx` | Added the linked wordmark | Provide an accessible home link |
+| `frontend/src/app/foundation.test.tsx` | Tested the brand and strict proxy settings | Keep the scaffold behavior verifiable |
+| `frontend/src/main.tsx` | Mounted the React root | Boot the SPA in strict mode |
+| `frontend/src/test/setup.ts` | Configured DOM assertions and cleanup | Isolate rendering tests |
+| `docs/CHANGELOG_AI.md` | Recorded this implementation milestone | Track files and reasons |
+
+### Step 5 · Application features
+
+| File | What changed | Why |
+|---|---|---|
+| `frontend/components.json` | Configured the selected shadcn registry and component paths | Keep local component source consistent |
+| `frontend/src/app/Layouts.tsx` | Added guest and protected layouts, theme and logout | Share accessible navigation and session guards |
+| `frontend/src/app/query.ts` | Created the shared query cache and account cleanup | Keep server state centralized |
+| `frontend/src/app/router.tsx` | Added lazy routes and page recovery | Keep page bundles isolated |
+| `frontend/src/components/fields.tsx` | Added shared accessible form controls | Keep form structure and messages consistent |
+| `frontend/src/components/ui/button.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/chart.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/check-icon.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/dialog.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/input.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/loader-icon.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/sheet.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/sonner.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/table.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/features/auth/AuthPages.tsx` | Added the auth feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/auth/VerificationNotice.tsx` | Added the auth feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/auth/schema.ts` | Added the auth feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/auth/session.ts` | Added the auth feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/categories/CategoriesPage.tsx` | Added the categories feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/categories/categories.test.ts` | Added targeted behavior assertions | Catch regressions in API, filter and amount handling |
+| `frontend/src/features/categories/queries.ts` | Added the categories feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/dashboard/DashboardPage.tsx` | Added the dashboard feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/profile/ProfilePage.tsx` | Added the profile feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/reports/CategoryChart.tsx` | Added the reports feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/reports/queries.ts` | Added the reports feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/transactions/TransactionEditor.tsx` | Added the transactions feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/transactions/TransactionTable.tsx` | Added the transactions feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/transactions/TransactionsPage.tsx` | Added the transactions feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/transactions/filters.test.ts` | Added targeted behavior assertions | Catch regressions in API, filter and amount handling |
+| `frontend/src/features/transactions/filters.ts` | Added the transactions feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/lib/amount.test.ts` | Added targeted behavior assertions | Catch regressions in API, filter and amount handling |
+| `frontend/src/lib/amount.ts` | Validated, compared and formatted exact decimal strings | Preserve financial precision |
+| `frontend/src/lib/api/client.test.ts` | Added targeted behavior assertions | Catch regressions in API, filter and amount handling |
+| `frontend/src/lib/api/client.ts` | Connected the typed client to cookie transport and status feedback | Share one request policy |
+| `frontend/src/lib/api/generated.ts` | Generated API paths and schemas | Keep browser request typing tied to the API export |
+| `frontend/src/lib/api/transport.ts` | Implemented runtime error parsing, bounded retries and locked cookie refresh | Preserve session and mutation safety |
+| `frontend/src/lib/dates.ts` | Handled date-only values and month ranges | Keep report periods consistent |
+| `frontend/src/lib/forms.ts` | Mapped runtime form issues to inputs | Show server validation at the relevant control |
+| `frontend/src/main.tsx` | Mounted providers and the lazy router | Start the full SpendWise SPA |
+| `frontend/src/styles.css` | Applied Harbor Ink, self-hosted fonts, glass and responsive styles | Deliver the approved accessible design |
+| `frontend/src/test/feature-flows.test.tsx` | Tested auth errors, category and transaction CRUD, reports and profile | Cover feature behavior against mock HTTP responses |
+| `frontend/src/vite-env.d.ts` | Typed optional currency settings | Validate the public frontend configuration |
+| `docs/CHANGELOG_AI.md` | Recorded the application files | Track this milestone |
+
+The shadcn button keeps its Radix Slot contract with CSS variants because the current source imports an unapproved variant helper. The two AnimateIcons adapters use typed callbacks and reduced-motion support. Other primitives are copied from the verified shadcn registry.
+
+### Steps 6–7 · Integration and quality
+
+| File | What changed | Why |
+|---|---|---|
+| `.env.example` | Documented the optional public currency flag | Make currency formatting discoverable |
+| `.github/workflows/ci.yml` | Excluded the new frontend-only hook from the existing backend job | Keep backend checks intact and avoid duplicating the path-filtered frontend job |
+| `.github/workflows/frontend.yml` | Added path-filtered build, tests, generation, audit and browser checks | Verify UI changes without changing the backend job |
+| `.pre-commit-config.yaml` | Registered the frontend gate for changes under frontend | Run the UI checks with standard commit hooks |
+| `Makefile` | Added frontend commands and included the frontend in production startup | Match the repository’s existing entry points |
+| `README.md` | Documented local use, checks, deployment and screenshots | Make the frontend operable and reviewable |
+| `docker-compose.prod.yml` | Added the nginx frontend service | Serve the production UI alongside the existing API |
+| `docker-compose.mailpit.yml` | Added an optional loopback-only Mailpit profile | Inspect development emails without starting it by default |
+| `docs/screenshots/frontend/dashboard-dark.png` | Captured the real dark dashboard | Show the approved dark design |
+| `docs/screenshots/frontend/dashboard-light.png` | Captured the real light dashboard | Show the approved light design |
+| `docs/screenshots/frontend/transactions-mobile.png` | Captured the real mobile transaction page | Show the responsive layout |
+| `frontend/.dockerignore` | Limited the Docker build inputs | Keep local settings and artifacts outside the build context |
+| `frontend/AGENTS.md` | Filled in the frontend commands | Preserve local contributor instructions |
+| `frontend/Dockerfile` | Added a pinned multi-stage non-root image | Build static assets and serve them with nginx |
+| `frontend/check-palette-contrast.mjs` | Removed the preview-only checker | Replace it with app-level contrast verification |
+| `frontend/design-preview.html` | Removed the approved temporary design preview | Use the implementation and screenshots for review |
+| `frontend/e2e/spendwise.spec.ts` | Added the real browser flow, axe and media checks | Verify login, expense creation, reporting and glass fallbacks |
+| `frontend/eslint.config.js` | Applied JavaScript rules to integration scripts | Check the full frontend toolchain |
+| `frontend/nginx.conf` | Added health, SPA fallback, asset caching and same-origin proxy rules | Preserve the public Host and real API responses |
+| `frontend/package.json` | Registered browser and bundle/contrast scripts | Provide repeatable quality commands |
+| `frontend/playwright.config.ts` | Configured the Chromium flow and strict server lifecycle | Run the browser against the isolated API and Vite |
+| `frontend/scripts/check-bundle.mjs` | Enforced gzip budgets from the build manifest | Keep chart code lazy and entry sizes bounded |
+| `frontend/scripts/check-contrast.mjs` | Measured the actual Harbor Ink tokens | Keep WCAG contrast checks after deleting the preview |
+| `frontend/scripts/e2e-backend.mjs` | Managed test database, API, browser and cleanup | Run integration without real dotenv files or development databases |
+| `frontend/src/lib/api/client.test.ts` | Added the staggered 401 test | Ensure a late response does not trigger another rotation |
+| `frontend/src/test/feature-flows.test.tsx` | Covered additional account flows | Verify password validation, reset, verification, logout and password change |
+| `frontend/tsconfig.node.json` | Typed DOM callbacks in Playwright | Keep strict typing for browser assertions |
+| `frontend/vite.config.ts` | Enabled an explicit disposable E2E upstream | Test the real API while keeping the normal proxy fixed |
+| `docs/CHANGELOG_AI.md` | Recorded integration and quality validation | Track files and reasons |
+
+Verified the production nginx proxy with an isolated HTTPS ingress and the real API, including exact-origin rejection and Secure HttpOnly cookie rotation. Verified verification and reset delivery through the optional Mailpit profile. The browser flow exercises axe and CSS transparency fallbacks. [Playwright CI](https://playwright.dev/docs/ci) · [Node setup](https://github.com/actions/setup-node/blob/v6/README.md) · [Compose teardown](https://docs.docker.com/reference/cli/docker/compose/down/)
+
+### Step 7 · Production image audit follow-up
+
+| File | What changed | Why |
+|---|---|---|
+| `docs/DEPENDENCY_CHANGES.md` | Recorded the nginx OS advisory findings and approval-gated package changes | Keep the image release blocker separate from the passing npm audit |
+| `README.md` | Linked the production release blocker | Surface the required remediation before deployment |
+| `docs/CHANGELOG_AI.md` | Recorded the follow-up | Track the release decision |
+
+### Step 7 · Visual verification follow-up
+
+| File | What changed | Why |
+|---|---|---|
+| `frontend/src/styles.css` | Placed the theme toggle next to the wordmark at mobile widths | Reduce the height of sticky navigation |
+| `frontend/src/features/reports/CategoryChart.tsx` | Applied the theme’s muted text color to chart labels | Improve dark-mode label contrast |
+| `frontend/src/components/ui/sonner.tsx` | Enabled toast dismissal | Keep feedback from covering mobile controls |
+| `frontend/e2e/spendwise.spec.ts` | Checked mobile nav height and dismissed the toast before the mobile screenshot | Keep the compact layout covered |
+| `docs/screenshots/frontend/dashboard-dark.png` | Refreshed the browser screenshot | Show the final chart contrast |
+| `docs/screenshots/frontend/dashboard-light.png` | Refreshed the browser screenshot | Show the final UI |
+| `docs/screenshots/frontend/transactions-mobile.png` | Refreshed the browser screenshot | Show the more compact navigation |
+| `docs/CHANGELOG_AI.md` | Recorded the screenshot review fixes | Track this visual follow-up |
+
+### PR #7 · Dark-mode table contrast
+
+| File | What changed | Why |
+|---|---|---|
+| `frontend/src/components/ui/table.tsx` | Limited table-row transitions to the background color | Keep text legible throughout a theme switch |
+| `frontend/e2e/spendwise.spec.ts` | Checked the transaction row transition before the dark-mode axe scan | Catch a foreground transition even if the scan runs after it finishes |
+| `docs/CHANGELOG_AI.md` | Recorded the contrast fix and regression coverage | Track the CI follow-up |
+
+### PR #7 · Dashboard viewport overflow
+
+| File | What changed | Why |
+|---|---|---|
+| `frontend/src/features/reports/CategoryChart.tsx` | Clipped horizontal overflow within the chart | Keep the old SVG width from expanding the page while Recharts measures a narrower viewport |
+| `frontend/e2e/spendwise.spec.ts` | Asserted chart clipping alongside the existing mobile layout check | Catch the resize regression even when the browser measures the new width quickly |
+| `docs/CHANGELOG_AI.md` | Recorded the chart containment fix and regression coverage | Track the second CI follow-up |
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.

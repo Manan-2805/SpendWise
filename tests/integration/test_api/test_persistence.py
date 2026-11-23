@@ -132,6 +132,34 @@ async def test_cookie_write_rejects_foreign_origin(
     assert response.status_code == 403
 
 
+async def test_cookie_write_allowlist_accepts_only_the_configured_origin(
+    client: AsyncClient,
+    verified_user: User,
+    auth_headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    allowed_origin = "https://frontend.example"
+    monkeypatch.setattr(settings, "CORS_ORIGINS", [allowed_origin])
+    access_token = auth_headers(verified_user)["Authorization"].split(" ", 1)[1]
+    client.cookies.set("access_token", access_token)
+
+    allowed = await client.patch(
+        "/api/v1/users/me",
+        headers={"Origin": allowed_origin},
+        json={"username": "allowed_name"},
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["username"] == "allowed_name"
+
+    rejected = await client.patch(
+        "/api/v1/users/me",
+        headers={"Origin": "https://other.example"},
+        json={"username": "foreign_name"},
+    )
+    assert rejected.status_code == 403
+    assert rejected.json()["code"] == "ACCESS_DENIED"
+
+
 async def test_concurrent_refresh_creates_one_successor_and_revokes_its_family(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

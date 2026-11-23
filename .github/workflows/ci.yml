@@ -15,4 +15,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - run: make install
       - run: make pre-commit-run
+        env:
+          # The path-filtered frontend workflow runs the new frontend hook’s checks.
+          SKIP: frontend-check
       - run: make build
