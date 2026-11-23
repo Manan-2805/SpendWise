@@ -54,6 +54,17 @@ An early benchmark left synthetic `capacity_user_*` accounts, their categories, 
 
 Readiness uses async Redis clients with short timeouts and cancellation. [redis-py async operations](https://redis.io/docs/latest/develop/clients/redis-py/async/)
 
+### Task 3 · PostgreSQL checkout deadline
+
+| File | What changed | Why |
+|---|---|---|
+| `app/core/config.py`, `app/db/session.py` | Set and validate checkout and retry defaults | Bound the time a request can queue for a connection |
+| `app/api/responses.py`, `app/core/exceptions.py`, `app/main.py` | Map pool saturation to a retryable `503` and expose the header to browser clients | Give callers a consistent overload response |
+| `tests/integration/test_api/test_persistence.py` | Hold the only connection during a write and retry after the `503` | Check deadline, rollback, and recovery against PostgreSQL |
+| `docs/CHANGELOG_AI.md` | Record pool changes | Track the implementation |
+
+SQLAlchemy uses `pool_timeout` for checkout waits and raises its `TimeoutError` when the pool is exhausted. [SQLAlchemy engine configuration](https://docs.sqlalchemy.org/en/20/core/engines.html#sqlalchemy.create_engine.params.pool_timeout) · [SQLAlchemy core exceptions](https://docs.sqlalchemy.org/en/20/core/exceptions.html#sqlalchemy.exc.TimeoutError)
+
 ## 2026-11-22 — `codex/audit-and-fixes`
 
 Resolve the audit's runtime and release findings, verify Make targets, and publish evidence in the README. Google OAuth implementation and licensing were deferred at the user's request.

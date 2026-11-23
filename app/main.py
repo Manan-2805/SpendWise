@@ -11,11 +11,13 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.api.responses import overload_response
 from app.api.v1.router import api_v1_router
 from app.core.config import settings
-from app.core.exceptions import SpendWiseError
+from app.core.exceptions import OverloadedError, SpendWiseError
 from app.core.health import monitor_readiness
 from app.core.logging import configure_logging
 from app.core.rate_limit import custom_rate_limit_handler, limiter
@@ -82,7 +84,7 @@ def create_application() -> FastAPI:
             "X-Correlation-ID",
             "X-Requested-With",
         ],
-        expose_headers=["X-Process-Time", "X-Correlation-ID"],
+        expose_headers=["X-Process-Time", "X-Correlation-ID", "Retry-After"],
         max_age=600,
     )
 
@@ -115,6 +117,13 @@ def create_application() -> FastAPI:
     )
 
     # Exception mapping rules
+    @application.exception_handler(OverloadedError)
+    @application.exception_handler(PoolTimeoutError)
+    async def overload_exception_handler(
+        request: Request, _: OverloadedError | PoolTimeoutError
+    ) -> JSONResponse:
+        return overload_response(request)
+
     @application.exception_handler(SpendWiseError)
     async def spendwise_exception_handler(
         request: Request, exc: SpendWiseError

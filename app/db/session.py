@@ -22,7 +22,7 @@ engine: AsyncEngine = create_async_engine(
     max_overflow=settings.DATABASE_MAX_OVERFLOW,
     pool_pre_ping=True,
     pool_recycle=3600,
-    pool_timeout=30,
+    pool_timeout=settings.DATABASE_POOL_TIMEOUT_SECONDS,
     hide_parameters=True,
 )
 
