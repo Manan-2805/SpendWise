@@ -1,7 +1,7 @@
 x-api: &api
   build:
     context: .
-    dockerfile: docker/Dockerfile.dev
+    dockerfile: ${LOCAL_DOCKERFILE:-docker/Dockerfile.dev}
   environment:
     ENVIRONMENT: development
     DEBUG: ${DEBUG:-true}

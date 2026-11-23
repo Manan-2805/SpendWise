@@ -1,6 +1,34 @@
 # AI change log
 Every change made by an AI agent: file, what, why. Newest session first.
 
+## 2026-11-23 — `codex/20261123-overload-and-readme`
+
+Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.
+
+| File | What changed | Why |
+|---|---|---|
+| `.gitignore` | Ignored `.env.monitoring` | Keep local Grafana credentials out of Git |
+| `Makefile` | Wired installation, local Granian and monitoring startup. Added monitoring health, stop, isolated capacity seed and capacity database commands. Show failed API probe payloads. | Run, seed and diagnose the local stack with Make |
+| `alembic.ini` | Add the checkout directory to the migration import path | Run migrations from the production image's uninstalled application source |
+| `docker-compose.monitoring.yml` | Disabled the API image's HTTP probe for Celery | Use process status as the Celery startup signal |
+| `docker-compose.yml` | Made the local application Dockerfile selectable | Reuse the production runtime image for local monitoring |
+| `scripts/capacity_observability.py` | Collect per-worker SQL, checkout, Redis and bcrypt timings on the benchmark process | Locate stalls through benchmark instrumentation |
+| `scripts/run_capacity_test.py` | Added open-loop scheduling, health probes, per-process CPU and database container sampling. Clean up benchmark worker processes between rounds. | Reproduce the mixed workload and distinguish client scheduling limits from API behavior |
+| `scripts/seed_load_test_db.py` | Added a deterministic capacity dataset, batched inserts and count validation | Reproduce and verify the required cardinality |
+| `scripts/setup_dev.py` | Generate a private Grafana env file once | Support fresh installs and preserve the existing Grafana credential on restart |
+| `tests/integration/test_seed_load.py` | Verify dataset ratios, an idempotent rerun and rejection of incomplete fixtures against PostgreSQL | Catch seed drift and duplicate data |
+| `tests/unit/test_run_capacity_test.py` | Verify the workload mix, transaction payload, CPU output parsing and worker cleanup | Keep runs comparable and prevent benchmark workers from carrying load into the next round |
+| `tests/unit/test_setup_dev.py` | Verify Grafana settings permissions and preservation | Catch credential exposure and inadvertent rotation |
+| `docs/CHANGELOG_AI.md` | Recorded the local tooling work | Track changes for the session |
+
+Compose layers the local application and Grafana settings files. [Docker Compose interpolation](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/#substitute-with---env-file)
+
+The migration configuration uses `prepend_sys_path` and `path_separator`. [Alembic configuration tutorial](https://alembic.sqlalchemy.org/en/latest/tutorial.html)
+
+Benchmark queue timing follows the SQLAlchemy implementation pinned in `uv.lock`. [SQLAlchemy 2.0 connection pooling](https://docs.sqlalchemy.org/en/20/core/pooling.html)
+
+The benchmark samples PostgreSQL and Redis container CPU from Docker's live stats stream. [Docker container stats](https://docs.docker.com/reference/cli/docker/container/stats/)
+
 ## 2026-11-22 — `codex/audit-and-fixes`
 
 Resolve the audit's runtime and release findings, verify Make targets, and publish evidence in the README. Google OAuth implementation and licensing were deferred at the user's request.

@@ -1,4 +1,8 @@
 services:
+  worker:
+    healthcheck:
+      disable: true
+
   prometheus:
     image: prom/prometheus:v3.5.0
     ports:

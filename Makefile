@@ -6,11 +6,15 @@
 APP_NAME    := spendwise
 DOCKER_COMP := docker compose
 TEST_COMP   := $(DOCKER_COMP) -p spendwise-test -f docker-compose.test.yml
+MONITOR_COMP := $(DOCKER_COMP) --env-file .env --env-file .env.monitoring -f docker-compose.yml -f docker-compose.monitoring.yml
 PYTHON      := uv run python
 UV          := uv
 
 DEV_POSTGRES_PORT ?= 15432
 DEV_REDIS_PORT ?= 16379
+CAPACITY_PROJECT ?= spendwise-capacity
+CAPACITY_POSTGRES_PORT ?= 15433
+CAPACITY_REDIS_PORT ?= 16380
 export DEV_POSTGRES_PORT DEV_REDIS_PORT
 DEV_SETTINGS = DATABASE_URL=postgresql://spendwise:spendwise_dev_password@127.0.0.1:$(DEV_POSTGRES_PORT)/spendwise \
 	REDIS_URL=redis://127.0.0.1:$(DEV_REDIS_PORT)/0 \
@@ -54,8 +58,8 @@ prepare-dev: dev-services
 	@$(DEV_SETTINGS) $(UV) run alembic upgrade head
 
 smoke:  ## Check local API liveness and readiness
-	curl -fsS http://127.0.0.1:8000/api/v1/health/live
-	curl -fsS http://127.0.0.1:8000/api/v1/health/ready
+	curl --fail-with-body -sS http://127.0.0.1:8000/api/v1/health/live
+	curl --fail-with-body -sS http://127.0.0.1:8000/api/v1/health/ready
 
 worker: prepare-dev  ## Start the local Celery worker
 	@$(DEV_SETTINGS) $(UV) run celery -A app.worker.celery_app worker --loglevel=info
@@ -82,9 +86,16 @@ up:  ## Start the development API, worker, PostgreSQL and Redis
 up-build:  ## Build images and start the stack
 	$(DOCKER_COMP) up -d --build
 
-.PHONY: monitoring
-monitoring:  ## Start the development stack with Prometheus and Grafana
-	$(DOCKER_COMP) -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+.PHONY: monitoring monitoring-smoke monitoring-stop
+monitoring: install  ## Build and start the local stack with Granian, Prometheus and Grafana
+	DEBUG=false LOCAL_DOCKERFILE=docker/Dockerfile $(MONITOR_COMP) up --build --wait
+
+monitoring-smoke:  ## Check local Prometheus and Grafana health
+	curl --fail-with-body -sS http://127.0.0.1:9090/-/ready
+	curl --fail-with-body -sS http://127.0.0.1:3000/api/health
+
+monitoring-stop:  ## Stop the monitored local stack and keep its data
+	$(MONITOR_COMP) stop
 
 .PHONY: down
 down:  ## Stop and remove containers
@@ -151,6 +162,16 @@ test-services:  ## Start disposable PostgreSQL and Redis on dedicated local port
 
 benchmark: test-services  ## Measure API throughput and p95 on disposable services
 	$(PYTHON) scripts/run_load_test.py $(BENCHMARK_ARGS)
+
+.PHONY: capacity capacity-db-shell
+capacity seed-capacity capacity-db-shell: DOCKER_COMP := $(DOCKER_COMP) -p $(CAPACITY_PROJECT)
+capacity seed-capacity capacity-db-shell: export DEV_POSTGRES_PORT = $(CAPACITY_POSTGRES_PORT)
+capacity seed-capacity capacity-db-shell: export DEV_REDIS_PORT = $(CAPACITY_REDIS_PORT)
+capacity: seed-capacity  ## Run the open-loop capacity test with two API and two Celery workers
+	@CAPACITY_CONTAINER_IDS="$$($(DOCKER_COMP) ps -q postgres redis)" $(DEV_SETTINGS) $(PYTHON) -m scripts.run_capacity_test $(CAPACITY_ARGS)
+
+capacity-db-shell:  ## Open psql on the isolated capacity database
+	$(DOCKER_COMP) exec postgres psql -U spendwise -d spendwise
 
 test: test-services  ## Run all tests with the 85% coverage gate
 	$(UV) run pytest
@@ -223,6 +244,10 @@ check: lint format-check typecheck security-check audit test  ## Run tests, lint
 .PHONY: seed
 seed: prepare-dev  ## Seed the local development database with sample data
 	@$(DEV_SETTINGS) $(PYTHON) scripts/seed_db.py
+
+.PHONY: seed-capacity
+seed-capacity: prepare-dev  ## Seed 5,000 users, 20,000 categories and 320,000 transactions in the capacity database
+	@$(DEV_SETTINGS) $(PYTHON) -m scripts.seed_load_test_db --capacity
 
 .PHONY: create-superuser
 create-superuser:  ## Create an admin user interactively
