@@ -10,19 +10,19 @@ from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.v1.router import api_v1_router
 from app.core.config import settings
 from app.core.exceptions import SpendWiseError
+from app.core.health import monitor_readiness
 from app.core.logging import configure_logging
 from app.core.rate_limit import custom_rate_limit_handler, limiter
-from app.core.redis import close_redis, ping_redis
+from app.core.redis import close_redis
 from app.core.security import clear_auth_cookies
 from app.core.tracing import setup_tracing
-from app.db.session import AsyncSessionLocal, engine
+from app.db.session import engine
 from app.middleware.correlation import CorrelationIDMiddleware
 from app.middleware.logging import RequestLoggingMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -40,32 +40,20 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     configure_logging(debug=settings.DEBUG)
     setup_tracing(application, engine)
 
-    # Fail fast if DB or Redis is down at startup
     try:
-        async with AsyncSessionLocal() as session:
-            await session.execute(text("SELECT 1"))
-    except Exception as e:
-        logger.critical("database_connection_failed", error_type=type(e).__name__)
-        raise
-
-    redis_ok = await ping_redis()
-    if not redis_ok:
-        logger.critical("redis_connection_failed")
-        raise RuntimeError("Redis connection failed")
-
-    logger.info(
-        "application_started",
-        app_name=settings.APP_NAME,
-        version=settings.APP_VERSION,
-        debug=settings.DEBUG,
-    )
-
-    yield
-
-    # Shutdown
-    await close_redis()
-    await engine.dispose()
-    logger.info("application_shutdown")
+        async with monitor_readiness() as readiness:
+            application.state.readiness = readiness
+            logger.info(
+                "application_started",
+                app_name=settings.APP_NAME,
+                version=settings.APP_VERSION,
+                debug=settings.DEBUG,
+            )
+            yield
+    finally:
+        await close_redis()
+        await engine.dispose()
+        logger.info("application_shutdown")
 
 
 def create_application() -> FastAPI:

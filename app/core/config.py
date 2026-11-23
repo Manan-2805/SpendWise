@@ -4,7 +4,7 @@ from string import hexdigits
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from pydantic import computed_field, field_validator, model_validator
+from pydantic import Field, computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     DATABASE_POOL_SIZE: int = 5
     DATABASE_MAX_OVERFLOW: int = 5
+    READINESS_INTERVAL_SECONDS: float = Field(default=2, gt=0)
+    READINESS_TIMEOUT_SECONDS: float = Field(default=0.2, gt=0)
+    READINESS_MAX_AGE_SECONDS: float = Field(default=6, gt=0)
 
     REDIS_URL: str
     CELERY_BROKER_URL: str

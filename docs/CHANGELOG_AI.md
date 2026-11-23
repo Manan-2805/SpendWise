@@ -42,6 +42,18 @@ The benchmark samples PostgreSQL and Redis container CPU from Docker's live stat
 
 An early benchmark left synthetic `capacity_user_*` accounts, their categories, and benchmark transactions in the default local development database. Those rows remain there. The new Compose project uses dedicated volumes. [Docker Compose labels](https://docs.docker.com/reference/compose-file/services/#labels) · [PostgreSQL 16 control data functions](https://www.postgresql.org/docs/16/functions-info.html#FUNCTIONS-PG-CONTROLDATA)
 
+### Task 2 · Health probes
+
+| File | What changed | Why |
+|---|---|---|
+| `app/api/v1/endpoints/health.py` | Exempt health routes from rate limiting and read readiness from the cached snapshot | Serve probes without request-time dependency I/O |
+| `app/core/health.py`, `app/main.py` | Refresh readiness in the lifespan with dedicated bounded clients | Report dependency health independently of the request pool |
+| `app/core/config.py` | Configure sampling interval, timeout, and snapshot lifetime | Bound dependency checks and expire stale status |
+| `tests/integration/test_api/test_health.py` | Test probe exemptions, snapshot transitions, cancellation, and pool isolation | Regress readiness and liveness behavior |
+| `docs/CHANGELOG_AI.md` | Record health changes | Track the implementation |
+
+Readiness uses async Redis clients with short timeouts and cancellation. [redis-py async operations](https://redis.io/docs/latest/develop/clients/redis-py/async/)
+
 ## 2026-11-22 — `codex/audit-and-fixes`
 
 Resolve the audit's runtime and release findings, verify Make targets, and publish evidence in the README. Google OAuth implementation and licensing were deferred at the user's request.
