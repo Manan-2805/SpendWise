@@ -64,10 +64,13 @@ test('signs in, records an expense and sees it in the report', async ({ page, re
     await page.setViewportSize({ width: 390, height: 844 })
     await page.getByRole('link', { name: 'Transactions', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Transactions' })).toBeVisible()
+    const dismiss = page.getByRole('button', { name: 'Close toast' })
+    if (await dismiss.isVisible()) await dismiss.click()
     await page.screenshot({ path: resolve(dir, 'transactions-mobile.png'), fullPage: true, animations: 'disabled' })
   }
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect((await header.boundingBox())?.height).toBeLessThan(165)
   await page.emulateMedia({ reducedMotion: 'reduce', forcedColors: 'active' })
   await expect.poll(() => header.evaluate(element => getComputedStyle(element).backdropFilter)).toBe('none')
   await page.emulateMedia({ forcedColors: 'none' })

@@ -169,6 +169,19 @@ Verified the production nginx proxy with an isolated HTTPS ingress and the real 
 | `README.md` | Linked the production release blocker | Surface the required remediation before deployment |
 | `docs/CHANGELOG_AI.md` | Recorded the follow-up | Track the release decision |
 
+### Step 7 · Visual verification follow-up
+
+| File | What changed | Why |
+|---|---|---|
+| `frontend/src/styles.css` | Placed the theme toggle next to the wordmark at mobile widths | Reduce the height of sticky navigation |
+| `frontend/src/features/reports/CategoryChart.tsx` | Applied the theme’s muted text color to chart labels | Improve dark-mode label contrast |
+| `frontend/src/components/ui/sonner.tsx` | Enabled toast dismissal | Keep feedback from covering mobile controls |
+| `frontend/e2e/spendwise.spec.ts` | Checked mobile nav height and dismissed the toast before the mobile screenshot | Keep the compact layout covered |
+| `docs/screenshots/frontend/dashboard-dark.png` | Refreshed the browser screenshot | Show the final chart contrast |
+| `docs/screenshots/frontend/dashboard-light.png` | Refreshed the browser screenshot | Show the final UI |
+| `docs/screenshots/frontend/transactions-mobile.png` | Refreshed the browser screenshot | Show the more compact navigation |
+| `docs/CHANGELOG_AI.md` | Recorded the screenshot review fixes | Track this visual follow-up |
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.
