@@ -24,6 +24,16 @@ The export uses the FastAPI schema method and runs with uv environment sync disa
 
 Forwarded-header behavior was checked against the installed Granian 2.7.5 wrapper and the upstream docs. [Granian proxy handling](https://github.com/emmett-framework/granian/blob/master/README.md#proxies-and-forwarded-headers) · [nginx proxy headers](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_set_header)
 
+### Step 2 · Design brief
+
+| File | What changed | Why |
+|---|---|---|
+| `frontend/design-preview.html` | Added a standalone dashboard, form and toast sample with three OKLCH palettes, two themes, embedded Fontsource preview subsets and three SVG marks | Compare the visual directions, typography, and icon choices offline before scaffolding |
+| `frontend/check-palette-contrast.mjs` | Added dependency-free contrast measurements for five roles on both surfaces in each theme | Verify the actual preview tokens against WCAG AA and reject out-of-sRGB values |
+| `docs/CHANGELOG_AI.md` | Recorded the design deliverables and compatibility checks | Track Step 2 changes and sources |
+
+Contrast uses CSS Color 4 conversion and WCAG 2.2 thresholds. The preview uses an opaque glass fallback and embeds SIL Open Font License subsets. Application font packages await Step 3 approval. A disposable plain SMTP listener on port 1025 accepted the existing worker's verification email with `SMTP_STARTTLS=false` and an empty `SMTP_USERNAME`. Mailpit and backend configuration work are deferred to integration. [CSS Color 4](https://www.w3.org/TR/css-color-4/#color-conversion-code) · [WCAG text contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) · [WCAG non-text contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html) · [Reduced transparency](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@media/prefers-reduced-transparency) · [Fontsource](https://fontsource.org/docs/getting-started/cdn) · [Mailpit SMTP](https://mailpit.axllent.org/docs/configuration/smtp/)
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.
