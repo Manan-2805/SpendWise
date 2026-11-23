@@ -75,6 +75,56 @@ Resolved the proposed npm graph in memory, compared it with the public advisory 
 | `frontend/src/test/setup.ts` | Configured DOM assertions and cleanup | Isolate rendering tests |
 | `docs/CHANGELOG_AI.md` | Recorded this implementation milestone | Track files and reasons |
 
+### Step 5 · Application features
+
+| File | What changed | Why |
+|---|---|---|
+| `frontend/components.json` | Configured the selected shadcn registry and component paths | Keep local component source consistent |
+| `frontend/src/app/Layouts.tsx` | Added guest and protected layouts, theme and logout | Share accessible navigation and session guards |
+| `frontend/src/app/query.ts` | Created the shared query cache and account cleanup | Keep server state centralized |
+| `frontend/src/app/router.tsx` | Added lazy routes and page recovery | Keep page bundles isolated |
+| `frontend/src/components/fields.tsx` | Added shared accessible form controls | Keep form structure and messages consistent |
+| `frontend/src/components/ui/button.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/chart.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/check-icon.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/dialog.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/input.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/loader-icon.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/sheet.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/sonner.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/components/ui/table.tsx` | Integrated the approved component source or adapter | Reuse maintained interaction and rendering primitives |
+| `frontend/src/features/auth/AuthPages.tsx` | Added the auth feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/auth/VerificationNotice.tsx` | Added the auth feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/auth/schema.ts` | Added the auth feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/auth/session.ts` | Added the auth feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/categories/CategoriesPage.tsx` | Added the categories feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/categories/categories.test.ts` | Added targeted behavior assertions | Catch regressions in API, filter and amount handling |
+| `frontend/src/features/categories/queries.ts` | Added the categories feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/dashboard/DashboardPage.tsx` | Added the dashboard feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/profile/ProfilePage.tsx` | Added the profile feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/reports/CategoryChart.tsx` | Added the reports feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/reports/queries.ts` | Added the reports feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/transactions/TransactionEditor.tsx` | Added the transactions feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/transactions/TransactionTable.tsx` | Added the transactions feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/transactions/TransactionsPage.tsx` | Added the transactions feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/features/transactions/filters.test.ts` | Added targeted behavior assertions | Catch regressions in API, filter and amount handling |
+| `frontend/src/features/transactions/filters.ts` | Added the transactions feature module | Implement the corresponding API interactions and screen states |
+| `frontend/src/lib/amount.test.ts` | Added targeted behavior assertions | Catch regressions in API, filter and amount handling |
+| `frontend/src/lib/amount.ts` | Validated, compared and formatted exact decimal strings | Preserve financial precision |
+| `frontend/src/lib/api/client.test.ts` | Added targeted behavior assertions | Catch regressions in API, filter and amount handling |
+| `frontend/src/lib/api/client.ts` | Connected the typed client to cookie transport and status feedback | Share one request policy |
+| `frontend/src/lib/api/generated.ts` | Generated API paths and schemas | Keep browser request typing tied to the API export |
+| `frontend/src/lib/api/transport.ts` | Implemented runtime error parsing, bounded retries and locked cookie refresh | Preserve session and mutation safety |
+| `frontend/src/lib/dates.ts` | Handled date-only values and month ranges | Keep report periods consistent |
+| `frontend/src/lib/forms.ts` | Mapped runtime form issues to inputs | Show server validation at the relevant control |
+| `frontend/src/main.tsx` | Mounted providers and the lazy router | Start the full SpendWise SPA |
+| `frontend/src/styles.css` | Applied Harbor Ink, self-hosted fonts, glass and responsive styles | Deliver the approved accessible design |
+| `frontend/src/test/feature-flows.test.tsx` | Tested auth errors, category and transaction CRUD, reports and profile | Cover feature behavior against mock HTTP responses |
+| `frontend/src/vite-env.d.ts` | Typed optional currency settings | Validate the public frontend configuration |
+| `docs/CHANGELOG_AI.md` | Recorded the application files | Track this milestone |
+
+The shadcn button keeps its Radix Slot contract with CSS variants because the current source imports an unapproved variant helper. The two AnimateIcons adapters use typed callbacks and reduced-motion support. Other primitives are copied from the verified shadcn registry.
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.
