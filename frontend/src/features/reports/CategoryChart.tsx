@@ -14,7 +14,7 @@ export function CategoryChart({ entries }: { entries: CategoryShare[] }) {
 
   return <div className="stack">
     <div aria-hidden="true">
-      <ChartContainer config={chartConfig} className="aspect-auto min-h-36 w-full" style={{ height: Math.max(144, plot.length * 33) }}>
+      <ChartContainer config={chartConfig} className="aspect-auto min-h-36 w-full overflow-x-clip" style={{ height: Math.max(144, plot.length * 33) }}>
         <BarChart accessibilityLayer={false} layout="vertical" data={plot} margin={{ right: 12, left: 4 }}>
           <XAxis type="number" domain={[0, 100]} hide />
           <YAxis type="category" dataKey="category" tickLine={false} axisLine={false} tick={{ fill: 'var(--muted)', fontSize: 12 }} width={97} tickMargin={5} />

@@ -60,6 +60,8 @@ test('signs in, records an expense and sees it in the report', async ({ page, re
   const recentRow = page.getByRole('region', { name: 'Recent transactions' }).getByRole('row', { name: /Studio supplies/ })
   await expect(recentRow).toHaveCSS('transition-property', 'background-color')
   await checkAccessibility()
+  const chart = page.getByRole('region', { name: 'Category report' }).locator('[data-slot="chart"]')
+  await expect(chart).toHaveCSS('overflow-x', 'clip')
   if (process.env.SPENDWISE_SCREENSHOTS) {
     const dir = resolve(process.env.SPENDWISE_SCREENSHOTS)
     await page.screenshot({ path: resolve(dir, 'dashboard-dark.png'), fullPage: true, animations: 'disabled' })

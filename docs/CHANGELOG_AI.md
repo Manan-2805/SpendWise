@@ -190,6 +190,14 @@ Verified the production nginx proxy with an isolated HTTPS ingress and the real 
 | `frontend/e2e/spendwise.spec.ts` | Checked the transaction row transition before the dark-mode axe scan | Catch a foreground transition even if the scan runs after it finishes |
 | `docs/CHANGELOG_AI.md` | Recorded the contrast fix and regression coverage | Track the CI follow-up |
 
+### PR #7 · Dashboard viewport overflow
+
+| File | What changed | Why |
+|---|---|---|
+| `frontend/src/features/reports/CategoryChart.tsx` | Clipped horizontal overflow within the chart | Keep the old SVG width from expanding the page while Recharts measures a narrower viewport |
+| `frontend/e2e/spendwise.spec.ts` | Asserted chart clipping alongside the existing mobile layout check | Catch the resize regression even when the browser measures the new width quickly |
+| `docs/CHANGELOG_AI.md` | Recorded the chart containment fix and regression coverage | Track the second CI follow-up |
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.
