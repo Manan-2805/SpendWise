@@ -1,17 +1,89 @@
 import asyncio
+from datetime import date
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy import select
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api.deps import get_db
+from app.core.config import settings
 from app.core.security import verify_token
 from app.main import app
 from app.models.auth import RefreshToken
+from app.models.transaction import Transaction
 from app.models.user import User
 from tests.conftest import TestAsyncSessionLocal
+
+
+async def test_pool_timeout_returns_retryable_503_without_a_partial_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delitem(app.dependency_overrides, get_db)
+    request_engine = create_async_engine(
+        settings.ASYNC_DATABASE_URL, pool_size=1, max_overflow=0, pool_timeout=0.05
+    )
+    monkeypatch.setattr(
+        "app.api.deps.AsyncSessionLocal",
+        async_sessionmaker(request_engine, expire_on_commit=False),
+    )
+    identity = uuid4().hex
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app, raise_app_exceptions=False),
+            base_url="http://test",
+        ) as client:
+            registration = await client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": f"{identity}@example.com",
+                    "username": identity,
+                    "password": "ExamplePass123!",
+                    "confirm_password": "ExamplePass123!",
+                },
+            )
+            assert registration.status_code == 201
+            token = registration.json()["access_token"]
+            user_id = int(verify_token(token, "access")["sub"])
+            headers = {"Authorization": f"Bearer {token}"}
+            category = await client.post(
+                "/api/v1/categories/",
+                headers=headers,
+                json={"name": "Pool test", "type": "expense"},
+            )
+            assert category.status_code == 201
+            transaction = {
+                "category_id": category.json()["id"],
+                "amount": "10.00",
+                "description": "Pool test",
+                "type": "expense",
+                "transaction_date": date.today().isoformat(),
+            }
+            async with request_engine.connect():
+                response = await asyncio.wait_for(
+                    client.post(
+                        "/api/v1/transactions/", headers=headers, json=transaction
+                    ),
+                    timeout=1,
+                )
+            assert response.status_code == 503
+            assert response.headers["retry-after"] == "1"
+            assert response.json()["code"] == "OVERLOADED"
+            async with TestAsyncSessionLocal() as reader:
+                count = await reader.scalar(
+                    select(func.count())
+                    .select_from(Transaction)
+                    .where(Transaction.user_id == user_id)
+                )
+            assert count == 0
+            retry = await client.post(
+                "/api/v1/transactions/", headers=headers, json=transaction
+            )
+            assert retry.status_code == 201
+    finally:
+        await request_engine.dispose()
 
 
 async def test_registration_is_visible_in_an_independent_session(

@@ -1,0 +1,37 @@
+services:
+  capacity-postgres:
+    image: postgres:16-alpine
+    labels:
+      com.spendwise.disposable: capacity
+    environment:
+      POSTGRES_DB: spendwise_capacity
+      POSTGRES_USER: spendwise_capacity
+      POSTGRES_PASSWORD: spendwise_capacity_local
+    volumes:
+      - capacity_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${CAPACITY_POSTGRES_PORT:-15434}:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "spendwise_capacity", "-d", "spendwise_capacity", "-h", "127.0.0.1"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  capacity-redis:
+    image: redis:7-alpine
+    labels:
+      com.spendwise.disposable: capacity
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - capacity_redis_data:/data
+    ports:
+      - "127.0.0.1:${CAPACITY_REDIS_PORT:-16381}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  capacity_postgres_data:
+  capacity_redis_data:

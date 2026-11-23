@@ -1,6 +1,120 @@
 # AI change log
 Every change made by an AI agent: file, what, why. Newest session first.
 
+## 2026-11-23 — `codex/20261123-overload-and-readme`
+
+Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.
+
+| File | What changed | Why |
+|---|---|---|
+| `.gitignore` | Ignored `.env.monitoring` | Keep local Grafana credentials out of Git |
+| `Makefile` | Wired installation, local Granian and monitoring startup. Added monitoring health, stop, isolated capacity seed and capacity database commands. Show failed API probe payloads. | Run, seed and diagnose the local stack with Make |
+| `alembic.ini` | Add the checkout directory to the migration import path | Run migrations from the production image's uninstalled application source |
+| `docker-compose.monitoring.yml` | Disabled the API image's HTTP probe for Celery | Use process status as the Celery startup signal |
+| `docker-compose.yml` | Made the local application Dockerfile selectable | Reuse the production runtime image for local monitoring |
+| `docs/plans/2026-11-23-overload.md` | Recorded acceptance targets, the session baseline, and a staged test-first plan | Review the overload changes before implementation |
+| `scripts/capacity_observability.py` | Collect per-worker SQL, checkout, Redis and bcrypt timings on the benchmark process | Locate stalls through benchmark instrumentation |
+| `scripts/run_capacity_test.py` | Added open-loop scheduling, health probes, per-process CPU and database container sampling. Clean up benchmark worker processes between rounds. | Reproduce the mixed workload and distinguish client scheduling limits from API behavior |
+| `scripts/seed_load_test_db.py` | Added a deterministic capacity dataset, batched inserts and count validation | Reproduce and verify the required cardinality |
+| `scripts/setup_dev.py` | Generate a private Grafana env file once | Support fresh installs and preserve the existing Grafana credential on restart |
+| `tests/integration/test_seed_load.py` | Verify dataset ratios, an idempotent rerun and rejection of incomplete fixtures against PostgreSQL | Catch seed drift and duplicate data |
+| `tests/unit/test_run_capacity_test.py` | Verify the workload mix, transaction payload, CPU output parsing and worker cleanup | Keep runs comparable and prevent benchmark workers from carrying load into the next round |
+| `tests/unit/test_setup_dev.py` | Verify Grafana settings permissions and preservation | Catch credential exposure and inadvertent rotation |
+| `docs/CHANGELOG_AI.md` | Recorded the local tooling work | Track changes for the session |
+
+Compose layers the local application and Grafana settings files. [Docker Compose interpolation](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/#substitute-with---env-file)
+
+The migration configuration uses `prepend_sys_path` and `path_separator`. [Alembic configuration tutorial](https://alembic.sqlalchemy.org/en/latest/tutorial.html)
+
+Benchmark queue timing follows the SQLAlchemy implementation pinned in `uv.lock`. [SQLAlchemy 2.0 connection pooling](https://docs.sqlalchemy.org/en/20/core/pooling.html)
+
+The benchmark samples PostgreSQL and Redis container CPU from Docker's live stats stream. [Docker container stats](https://docs.docker.com/reference/cli/docker/container/stats/)
+
+### Task 1 · Disposable capacity database
+
+| File | What changed | Why |
+|---|---|---|
+| `Makefile`, `docker-compose.capacity.yml` | Use a dedicated capacity project, databases and ports | Keep seed and load writes isolated |
+| `scripts/capacity_environment.py` | Check Docker service labels, loopback bindings and PostgreSQL cluster identity | Refuse other servers before writes |
+| `scripts/run_capacity_test.py`, `scripts/seed_load_test_db.py` | Verify provenance before capacity migrations, seeding and workload | Enforce the guard at both entry points |
+| `tests/unit/test_capacity_environment.py` | Exercise URL refusal and cluster identity matching | Catch unsafe target selection |
+| `docs/CHANGELOG_AI.md` | Record isolation and earlier development seed rows | Preserve their disposition |
+
+An early benchmark left synthetic `capacity_user_*` accounts, their categories, and benchmark transactions in the default local development database. Those rows remain there. The new Compose project uses dedicated volumes. [Docker Compose labels](https://docs.docker.com/reference/compose-file/services/#labels) · [PostgreSQL 16 control data functions](https://www.postgresql.org/docs/16/functions-info.html#FUNCTIONS-PG-CONTROLDATA)
+
+### Task 2 · Health probes
+
+| File | What changed | Why |
+|---|---|---|
+| `app/api/v1/endpoints/health.py` | Exempt health routes from rate limiting and read readiness from the cached snapshot | Serve probes without request-time dependency I/O |
+| `app/core/health.py`, `app/main.py` | Refresh readiness in the lifespan with dedicated bounded clients | Report dependency health independently of the request pool |
+| `app/core/config.py` | Configure sampling interval, timeout, and snapshot lifetime | Bound dependency checks and expire stale status |
+| `tests/integration/test_api/test_health.py` | Test probe exemptions, snapshot transitions, cancellation, and pool isolation | Regress readiness and liveness behavior |
+| `docs/CHANGELOG_AI.md` | Record health changes | Track the implementation |
+
+Readiness uses async Redis clients with short timeouts and cancellation. [redis-py async operations](https://redis.io/docs/latest/develop/clients/redis-py/async/)
+
+### Task 3 · PostgreSQL checkout deadline
+
+| File | What changed | Why |
+|---|---|---|
+| `app/core/config.py`, `app/db/session.py` | Set and validate checkout and retry defaults | Bound the time a request can queue for a connection |
+| `app/api/responses.py`, `app/core/exceptions.py`, `app/main.py` | Map pool saturation to a retryable `503` and expose the header to browser clients | Give callers a consistent overload response |
+| `tests/integration/test_api/test_persistence.py` | Hold the only connection during a write and retry after the `503` | Check deadline, rollback, and recovery against PostgreSQL |
+| `docs/CHANGELOG_AI.md` | Record pool changes | Track the implementation |
+
+SQLAlchemy uses `pool_timeout` for checkout waits and raises its `TimeoutError` when the pool is exhausted. [SQLAlchemy engine configuration](https://docs.sqlalchemy.org/en/20/core/engines.html#sqlalchemy.create_engine.params.pool_timeout) · [SQLAlchemy core exceptions](https://docs.sqlalchemy.org/en/20/core/exceptions.html#sqlalchemy.exc.TimeoutError)
+
+### Task 4 · Login bcrypt and checkout limits
+
+| File | What changed | Why |
+|---|---|---|
+| `app/api/v1/endpoints/auth.py`, `app/services/auth.py` | Snapshot credentials, end the login read transaction, and recheck credentials under lock before issuing tokens | Release the connection during bcrypt and handle credential changes safely |
+| `app/core/config.py` | Set a per-worker verification capacity | Bound CPU use by concurrent login checks |
+| `tests/integration/test_api/test_auth.py` | Hold bcrypt open and verify checkout release, saturation, and account races | Exercise the request path against a real pool |
+| `tests/unit/test_auth_service.py` | Verify request cancellation retains the slot until hashing finishes | Bound background hashing under disconnects |
+| `docs/CHANGELOG_AI.md` | Record login changes | Track the implementation |
+
+### Task 5 · Admission and OpenAPI
+
+| File | What changed | Why |
+|---|---|---|
+| `app/middleware/overload.py`, `app/main.py` | Limit per-worker in-flight requests ahead of rate limiting and preserve probe paths | Shed excess requests promptly |
+| `app/api/responses.py`, `app/api/v1/router.py` | Declare the overload payload, response code, and retry header in OpenAPI | Let generated clients handle overload |
+| `app/core/config.py`, `docker-compose.yml`, `docker-compose.prod.yml` | Expose admission, health, login, pool and transport settings | Tune the limits for each deployment |
+| `scripts/run_capacity_test.py` | Record rejection p95 and the effective admission setting | Compare the candidate limits |
+| `tests/unit/test_overload.py` | Test slot release, health bypass, and OpenAPI | Protect runtime and client behavior |
+| `docs/capacity.md` | Record the admission sweep and its issuance limits | Show the basis for selecting a default |
+| `docs/plans/2026-11-23-overload.md` | Record the approved sweep, OpenAPI and approval gate updates | Align the staged plan with the approved scope |
+| `docs/CHANGELOG_AI.md` | Record admission and schema changes | Track the implementation |
+
+FastAPI merges router responses into the generated schema. [Additional Responses in OpenAPI](https://fastapi.tiangolo.com/advanced/additional-responses/)
+
+### Final 160 req/s check and repository documentation
+
+| File | What changed | Why |
+|---|---|---|
+| `docs/capacity.md` | Compare the final 160 req/s round with this session's baseline and record the test scope | Show the result with its measurement limits |
+| `README.md` | Replace the smoke benchmark with measured capacity, document known limits, and add verified features and an architecture diagram | Explain the API and the measured behavior |
+| `AGENTS.md` | Fill the Commands section from existing Make targets | Give contributors the repository's entry points |
+| `docs/CHANGELOG_AI.md` | Record the feature evidence and deliberate omissions | Make the documentation claims traceable |
+
+The admission sweep used short 60-second rounds. The API, PostgreSQL, Redis, Celery, and load generator all ran on the same laptop with 4 vCPU and 5.8 GiB RAM. The final round used a fresh disposable database after temporary containers were removed and the development stack was stopped. The named volumes were preserved.
+
+#### Deliberate omissions
+
+- Task 6 Prometheus overload metrics.
+- The full before-and-after capacity rerun.
+- The 960 req/s round.
+- Recovery-time measurement.
+
+#### README feature evidence
+
+- Categories and transactions are implemented in `app/api/v1/endpoints/categories.py` and `app/api/v1/endpoints/transactions.py`. Integration coverage is in `tests/integration/test_api/test_categories.py` and `tests/integration/test_api/test_transactions.py`.
+- Reports use `app/services/report.py` and `app/core/cache.py`. Report and cache behaviors are covered in `tests/integration/test_api/test_reports.py` and `tests/unit/test_cache.py`.
+- Account flows and email jobs are in `app/api/v1/endpoints/auth.py`, `app/services/auth.py`, and `app/worker/tasks.py`. Coverage is in `tests/integration/test_api/test_auth.py` and `tests/unit/test_worker_tasks.py`.
+- Probes, admission, and the retry header are in `app/api/v1/endpoints/health.py`, `app/core/health.py`, `app/middleware/overload.py`, and `app/api/responses.py`. Coverage is in `tests/integration/test_api/test_health.py` and `tests/unit/test_overload.py`.
+
 ## 2026-11-22 — `codex/audit-and-fixes`
 
 Resolve the audit's runtime and release findings, verify Make targets, and publish evidence in the README. Google OAuth implementation and licensing were deferred at the user's request.

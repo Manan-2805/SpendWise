@@ -1,14 +1,84 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
+from threading import Event
+from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.api.deps import get_db
+from app.core.config import settings
 from app.core.security import hash_password, hash_refresh_token, verify_token
+from app.main import app
 from app.models.auth import RefreshToken
 from app.models.user import User
+from tests.conftest import TestAsyncSessionLocal
+
+
+@pytest.mark.parametrize("change", ["missing", "password", "inactive"])
+async def test_login_releases_checkout_during_hashing(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    identity = uuid4().hex
+    email = f"{identity}@example.com"
+    if change != "missing":
+        async with TestAsyncSessionLocal.begin() as seed:
+            seed.add(
+                User(
+                    email=email,
+                    username=identity,
+                    hashed_password="fixture",
+                    is_active=True,
+                )
+            )
+
+    request_engine = create_async_engine(
+        settings.ASYNC_DATABASE_URL, pool_size=1, max_overflow=0, pool_timeout=0.1
+    )
+    monkeypatch.delitem(app.dependency_overrides, get_db)
+    monkeypatch.setattr(
+        "app.api.deps.AsyncSessionLocal", async_sessionmaker(request_engine)
+    )
+    audit = AsyncMock()
+    monkeypatch.setattr("app.services.auth.AuditService.log_action", audit)
+    loop = asyncio.get_running_loop()
+    started = asyncio.Event()
+    released = Event()
+
+    def pending_hash(*_args: str) -> bool:
+        loop.call_soon_threadsafe(started.set)
+        return released.wait(timeout=3)
+
+    monkeypatch.setattr("app.services.auth.verify_password", pending_hash)
+    payload = {"email": email, "password": "Password123!"}
+    login = asyncio.create_task(client.post("/api/v1/auth/login", json=payload))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=2)
+        assert request_engine.sync_engine.pool.checkedout() == 0
+        extra = await client.post("/api/v1/auth/login", json=payload)
+        assert (extra.status_code, extra.headers.get("retry-after")) == (503, "1")
+
+        if change != "missing":
+            values = (
+                {"is_active": False}
+                if change == "inactive"
+                else {"hashed_password": "changed"}
+            )
+            async with TestAsyncSessionLocal.begin() as writer:
+                await writer.execute(
+                    update(User).where(User.email == email).values(**values)
+                )
+        released.set()
+        assert (await login).status_code == 401
+        if change == "missing":
+            assert audit.await_args.kwargs["action"] == "LOGIN_FAILED"
+    finally:
+        released.set()
+        await asyncio.gather(login, return_exceptions=True)
+        await request_engine.dispose()
 
 
 async def test_register_success(client: AsyncClient, db_session: AsyncSession) -> None:
@@ -68,7 +138,7 @@ async def test_login_success(client: AsyncClient, db_session: AsyncSession) -> N
         is_verified=True,
     )
     db_session.add(user)
-    await db_session.flush()
+    await db_session.commit()
 
     payload = {"email": "test_login@example.com", "password": "Password123!"}
     response = await client.post("/api/v1/auth/login", json=payload)
@@ -92,7 +162,7 @@ async def test_login_invalid_password(
         is_verified=True,
     )
     db_session.add(user)
-    await db_session.flush()
+    await db_session.commit()
 
     payload = {"email": "test_login_fail@example.com", "password": "WrongPassword!"}
     response = await client.post("/api/v1/auth/login", json=payload)
@@ -306,7 +376,7 @@ async def test_resend_verification_success(
         is_verified=False,
     )
     db_session.add(user)
-    await db_session.flush()
+    await db_session.commit()
 
     # Authenticate user first
     payload = {"email": "unverified_resend@example.com", "password": "Password123!"}

@@ -40,4 +40,14 @@ Give me: files changed (with reasons), tests run and results, open questions.
 Push the branch only if I approve, then open a pull request. I merge it myself.
 
 ## Commands
-(To be filled in after the first audit: install, run, test, lint, build, docker.)
+
+| Purpose | Command |
+|---|---|
+| Install locked dependencies and local settings | `make install` |
+| Run the API locally | `make dev` for reload or `make run` for Granian |
+| Run checks | `make test`, `make lint`, or `make check` for the full check suite |
+| Build the production image | `make build` |
+| Start Docker services | `make up` or `make monitoring` for the monitored stack |
+| Stop the monitored stack | `make monitoring-stop` |
+| Probe the running API | `make smoke` |
+| Seed and benchmark the disposable capacity database | `make seed-capacity` or `make capacity` |

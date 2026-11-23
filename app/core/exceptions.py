@@ -243,6 +243,14 @@ class RateLimitExceededError(SpendWiseError):
 # 503 — Service Unavailable
 
 
+class OverloadedError(SpendWiseError):
+    status_code = 503
+    code = "OVERLOADED"
+
+    def __init__(self) -> None:
+        super().__init__("The API is busy. Retry shortly.")
+
+
 class ServiceUnavailableError(SpendWiseError):
     """A required external service (DB, Redis, email) is unreachable."""
 

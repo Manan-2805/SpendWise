@@ -1,4 +1,6 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
+from threading import Event
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -8,6 +10,7 @@ from app.core.exceptions import (
     InactiveUserError,
     InvalidCredentialsError,
     InvalidTokenError,
+    OverloadedError,
 )
 from app.core.security import hash_password
 from app.db.session import run_after_commit
@@ -15,6 +18,37 @@ from app.models.auth import RefreshToken
 from app.models.user import User
 from app.schemas.auth import RegisterRequest
 from app.services.auth import AuthService
+
+
+async def test_cancelled_login_keeps_bcrypt_slot_until_thread_exits(
+    monkeypatch,
+) -> None:
+    from app.services import auth
+
+    slot = asyncio.Semaphore(1)
+    monkeypatch.setattr(auth, "_login_slots", slot)
+    started = asyncio.Event()
+    released = Event()
+    loop = asyncio.get_running_loop()
+
+    def block(*_args: str) -> bool:
+        loop.call_soon_threadsafe(started.set)
+        return released.wait(timeout=3)
+
+    monkeypatch.setattr(auth, "verify_password", block)
+    task = asyncio.create_task(auth.verify_login_password("pw", "hash"))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        with pytest.raises(OverloadedError):
+            await auth.verify_login_password("pw", "hash")
+    finally:
+        released.set()
+        await asyncio.wait_for(slot.acquire(), timeout=1)
+        slot.release()
+    assert await auth.verify_login_password("pw", "hash")
 
 
 @pytest.mark.asyncio
