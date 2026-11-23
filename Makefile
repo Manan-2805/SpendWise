@@ -12,9 +12,17 @@ UV          := uv
 
 DEV_POSTGRES_PORT ?= 15432
 DEV_REDIS_PORT ?= 16379
-CAPACITY_PROJECT ?= spendwise-capacity
-CAPACITY_POSTGRES_PORT ?= 15433
-CAPACITY_REDIS_PORT ?= 16380
+CAPACITY_PROJECT ?= spendwise-capacity-isolated
+CAPACITY_POSTGRES_PORT ?= 15434
+CAPACITY_REDIS_PORT ?= 16381
+export CAPACITY_PROJECT CAPACITY_POSTGRES_PORT CAPACITY_REDIS_PORT
+CAPACITY_COMP := $(DOCKER_COMP) -p "$$CAPACITY_PROJECT" -f docker-compose.capacity.yml
+CAPACITY_SETTINGS = DATABASE_URL=postgresql://spendwise_capacity:spendwise_capacity_local@127.0.0.1:$(CAPACITY_POSTGRES_PORT)/spendwise_capacity \
+	REDIS_URL=redis://127.0.0.1:$(CAPACITY_REDIS_PORT)/0 \
+	CELERY_BROKER_URL=redis://127.0.0.1:$(CAPACITY_REDIS_PORT)/1 \
+	CELERY_RESULT_BACKEND=redis://127.0.0.1:$(CAPACITY_REDIS_PORT)/2 \
+	CAPACITY_POSTGRES_ID="$$($(CAPACITY_COMP) ps -q capacity-postgres)" \
+	CAPACITY_REDIS_ID="$$($(CAPACITY_COMP) ps -q capacity-redis)"
 export DEV_POSTGRES_PORT DEV_REDIS_PORT
 DEV_SETTINGS = DATABASE_URL=postgresql://spendwise:spendwise_dev_password@127.0.0.1:$(DEV_POSTGRES_PORT)/spendwise \
 	REDIS_URL=redis://127.0.0.1:$(DEV_REDIS_PORT)/0 \
@@ -163,15 +171,16 @@ test-services:  ## Start disposable PostgreSQL and Redis on dedicated local port
 benchmark: test-services  ## Measure API throughput and p95 on disposable services
 	$(PYTHON) scripts/run_load_test.py $(BENCHMARK_ARGS)
 
-.PHONY: capacity capacity-db-shell
-capacity seed-capacity capacity-db-shell: DOCKER_COMP := $(DOCKER_COMP) -p $(CAPACITY_PROJECT)
-capacity seed-capacity capacity-db-shell: export DEV_POSTGRES_PORT = $(CAPACITY_POSTGRES_PORT)
-capacity seed-capacity capacity-db-shell: export DEV_REDIS_PORT = $(CAPACITY_REDIS_PORT)
+.PHONY: capacity capacity-db-shell capacity-services
+capacity-services:
+	@case "$$CAPACITY_PROJECT" in spendwise-capacity-?*) ;; *) echo 'Use a spendwise-capacity- project'; exit 1;; esac
+	$(CAPACITY_COMP) up -d --wait
+
 capacity: seed-capacity  ## Run the open-loop capacity test with two API and two Celery workers
-	@CAPACITY_CONTAINER_IDS="$$($(DOCKER_COMP) ps -q postgres redis)" $(DEV_SETTINGS) $(PYTHON) -m scripts.run_capacity_test $(CAPACITY_ARGS)
+	@$(CAPACITY_SETTINGS) $(PYTHON) -m scripts.run_capacity_test $(CAPACITY_ARGS)
 
 capacity-db-shell:  ## Open psql on the isolated capacity database
-	$(DOCKER_COMP) exec postgres psql -U spendwise -d spendwise
+	$(CAPACITY_COMP) exec capacity-postgres psql -U spendwise_capacity -d spendwise_capacity
 
 test: test-services  ## Run all tests with the 85% coverage gate
 	$(UV) run pytest
@@ -246,8 +255,8 @@ seed: prepare-dev  ## Seed the local development database with sample data
 	@$(DEV_SETTINGS) $(PYTHON) scripts/seed_db.py
 
 .PHONY: seed-capacity
-seed-capacity: prepare-dev  ## Seed 5,000 users, 20,000 categories and 320,000 transactions in the capacity database
-	@$(DEV_SETTINGS) $(PYTHON) -m scripts.seed_load_test_db --capacity
+seed-capacity: capacity-services  ## Seed 5,000 users, 20,000 categories and 320,000 transactions in the capacity database
+	@$(CAPACITY_SETTINGS) $(PYTHON) -m scripts.seed_load_test_db --capacity
 
 .PHONY: create-superuser
 create-superuser:  ## Create an admin user interactively

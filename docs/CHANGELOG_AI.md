@@ -30,6 +30,18 @@ Benchmark queue timing follows the SQLAlchemy implementation pinned in `uv.lock`
 
 The benchmark samples PostgreSQL and Redis container CPU from Docker's live stats stream. [Docker container stats](https://docs.docker.com/reference/cli/docker/container/stats/)
 
+### Task 1 · Disposable capacity database
+
+| File | What changed | Why |
+|---|---|---|
+| `Makefile`, `docker-compose.capacity.yml` | Use a dedicated capacity project, databases and ports | Keep seed and load writes isolated |
+| `scripts/capacity_environment.py` | Check Docker service labels, loopback bindings and PostgreSQL cluster identity | Refuse other servers before writes |
+| `scripts/run_capacity_test.py`, `scripts/seed_load_test_db.py` | Verify provenance before capacity migrations, seeding and workload | Enforce the guard at both entry points |
+| `tests/unit/test_capacity_environment.py` | Exercise URL refusal and cluster identity matching | Catch unsafe target selection |
+| `docs/CHANGELOG_AI.md` | Record isolation and earlier development seed rows | Preserve their disposition |
+
+An early benchmark left synthetic `capacity_user_*` accounts, their categories, and benchmark transactions in the default local development database. Those rows remain there. The new Compose project uses dedicated volumes. [Docker Compose labels](https://docs.docker.com/reference/compose-file/services/#labels) · [PostgreSQL 16 control data functions](https://www.postgresql.org/docs/16/functions-info.html#FUNCTIONS-PG-CONTROLDATA)
+
 ## 2026-11-22 — `codex/audit-and-fixes`
 
 Resolve the audit's runtime and release findings, verify Make targets, and publish evidence in the README. Google OAuth implementation and licensing were deferred at the user's request.

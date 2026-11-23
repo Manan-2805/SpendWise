@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from scripts.capacity_environment import verify_capacity_environment
 from scripts.run_load_test import wait_for_api
 
 WORKERS = 2
@@ -318,6 +319,7 @@ async def main() -> None:
     if args.seconds < 1 or min(args.rates) < 1 or max(args.rates) > 5000:
         parser.error("Use at least one second and rates in the range 1-5000 req/s")
 
+    await verify_capacity_environment()
     env = local_environment()
     os.environ.update(env)
     identities = await accounts(max(args.rates))
@@ -346,7 +348,10 @@ async def main() -> None:
         "--no-access-log",
         "scripts.capacity_observability:app",
     ]
-    container_ids = os.environ["CAPACITY_CONTAINER_IDS"].split()
+    container_ids = [
+        os.environ["CAPACITY_POSTGRES_ID"],
+        os.environ["CAPACITY_REDIS_ID"],
+    ]
     stats_command = [
         "docker",
         "stats",

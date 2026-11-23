@@ -13,8 +13,11 @@ transactions on the local stack.
 import argparse
 import asyncio
 import random
+import subprocess
+import sys
 from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +28,7 @@ from app.db.session import AsyncSessionLocal
 from app.models.category import Category
 from app.models.transaction import Transaction
 from app.models.user import User
+from scripts.capacity_environment import verify_capacity_environment
 
 SEED_PASSWORD = "SecurePassword123!"
 
@@ -203,7 +207,17 @@ async def seed_volume(*, capacity: bool = False, user_count: int | None = None) 
         print("--- Seeding Completed Successfully ---")
 
 
-if __name__ == "__main__":
+async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--capacity", action="store_true")
-    asyncio.run(seed_volume(capacity=parser.parse_args().capacity))
+    args = parser.parse_args()
+    if args.capacity:
+        await verify_capacity_environment()
+        subprocess.run(
+            [Path(sys.executable).with_name("alembic"), "upgrade", "head"], check=True
+        )
+    await seed_volume(capacity=args.capacity)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
