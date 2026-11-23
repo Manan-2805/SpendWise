@@ -1,8 +1,15 @@
 # SpendWise
 
-[![CI](https://github.com/Manan-2805/SpendWise/actions/workflows/ci.yml/badge.svg)](https://github.com/Manan-2805/SpendWise/actions/workflows/ci.yml) [![Local coverage: 87.23%](https://img.shields.io/badge/local%20coverage-87.23%25-brightgreen)](#tests-and-checks)
+[![CI](https://github.com/Manan-2805/SpendWise/actions/workflows/ci.yml/badge.svg)](https://github.com/Manan-2805/SpendWise/actions/workflows/ci.yml) [![Local coverage: 88.13%](https://img.shields.io/badge/local%20coverage-88.13%25-brightgreen)](#tests-and-checks)
 
 SpendWise is a REST API for recording income and expenses and summarizing activity by month or category. It uses FastAPI, PostgreSQL, and Redis. The repository includes database migrations, a Celery worker, and tests.
+
+## Features
+
+- Create and edit categories and transactions, and filter transaction lists.
+- View monthly summaries, category breakdowns, and balance trends with Redis report caching.
+- Register, sign in, rotate refresh tokens, and reset passwords. Celery handles verification and password reset email jobs.
+- Check liveness and cached dependency readiness separately. Excess API requests receive `503` with `Retry-After`.
 
 ## Quick start
 
@@ -54,6 +61,21 @@ Category creation returns `201 Created` with a category ID, name, and type. The 
 {"year":2026,"month":11,"income":"0","expense":"24.50","balance":"-24.50"}
 ```
 
+## Architecture
+
+```mermaid
+flowchart LR
+    API[FastAPI routes] --> Services[Services]
+    Services --> Repositories[Repositories]
+    Repositories --> PostgreSQL[(PostgreSQL)]
+    API -->|Rate limits| Redis[(Redis)]
+    Services -->|Report cache| Redis
+    Services -->|Queue jobs| Redis
+    Redis -->|Broker| Celery[Celery workers]
+    Celery -->|Task results| Redis
+    Celery --> PostgreSQL
+```
+
 ## Repository map
 
 ```text
@@ -92,22 +114,25 @@ make check
 make pre-commit-install
 ```
 
-Make starts disposable PostgreSQL and Redis on ports 55432 and 56379 for integration tests. `make test-unit` runs without those services. The full suite enforces 85% application line coverage, and CI builds the image after the hooks pass. The local verification on 2026-11-22 passed 164 tests at 87.23% coverage. Ruff, Mypy, Bandit, and pip-audit also passed.
+Make starts disposable PostgreSQL and Redis on ports 55432 and 56379 for integration tests. `make test-unit` runs without those services. The full suite enforces 85% application line coverage, and CI builds the image after the hooks pass. The local verification on 2026-11-23 passed 187 tests at 88.13% coverage. Ruff, Mypy, Bandit, and pip-audit also passed.
 
 ## Performance
 
-A local smoke benchmark on 2026-11-22 used an AMD Ryzen 7 7840HS, four visible logical CPUs, and 5.8 GiB of RAM. Two Granian workers served four concurrent clients for five seconds against 25 seeded transactions. The test alternated transaction listings and a warmed monthly report.
+A local test used 87% reads and reports, 12% transaction writes, and 1% logins. The load generator and services shared one WSL2 laptop with 4 vCPU and 5.8 GiB RAM. The final settings allow 16 in-flight requests per API worker.
 
-| Scenario | Requests | Requests/s | p95 |
-|---|---:|---:|---:|
-| Combined | 1,024 | 204.35 | 24.69 ms |
-| Transaction listing | 513 | 102.37 | 25.88 ms |
-| Cached monthly summary | 511 | 101.97 | 21.51 ms |
+| Round | Offered req/s | Successful req/s | Overall p95 | Readiness |
+|---|---:|---:|---:|---:|
+| 120-second baseline | 160 | 160.00 | 35.98 ms | 99.17% |
+| 120-second final check | 160 | 159.53 | 35.85 ms | 100% |
+| 60-second sweep | 240 | 235.33 | 127.43 ms | 100% |
+| 60-second sweep | 640 | 198.02 | 221.71 ms | 100% |
 
-All measured requests succeeded. The benchmark raises the rate limit for its disposable API instance. These are local measurements with a small dataset and a warmed cache.
+The final 160 req/s round passed the thresholds but had worse throughput and more errors than the baseline. It returned 57 retryable `503` responses (0.30%). At 640 offered req/s, the sweep's `503` responses had a p95 of 154 ms and liveness stayed at 100%. [Full measurements and scope](docs/capacity.md)
+
+**Known limits.** These measurements apply to this laptop and workload. The 240 and 640 req/s results come from short sweep rounds. At 640 offered req/s, the API shed most requests.
 
 ```sh
-make benchmark BENCHMARK_ARGS='--seconds 5 --concurrency 4 --transactions 25'
+make capacity CAPACITY_ARGS='--rates 160 --seconds 120'
 ```
 
 ## Deployment

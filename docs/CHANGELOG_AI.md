@@ -90,6 +90,31 @@ SQLAlchemy uses `pool_timeout` for checkout waits and raises its `TimeoutError` 
 
 FastAPI merges router responses into the generated schema. [Additional Responses in OpenAPI](https://fastapi.tiangolo.com/advanced/additional-responses/)
 
+### Final 160 req/s check and repository documentation
+
+| File | What changed | Why |
+|---|---|---|
+| `docs/capacity.md` | Compare the final 160 req/s round with this session's baseline and record the test scope | Show the result with its measurement limits |
+| `README.md` | Replace the smoke benchmark with measured capacity, document known limits, and add verified features and an architecture diagram | Explain the API and the measured behavior |
+| `AGENTS.md` | Fill the Commands section from existing Make targets | Give contributors the repository's entry points |
+| `docs/CHANGELOG_AI.md` | Record the feature evidence and deliberate omissions | Make the documentation claims traceable |
+
+The admission sweep used short 60-second rounds. The API, PostgreSQL, Redis, Celery, and load generator all ran on the same laptop with 4 vCPU and 5.8 GiB RAM. The final round used a fresh disposable database after temporary containers were removed and the development stack was stopped. The named volumes were preserved.
+
+#### Deliberate omissions
+
+- Task 6 Prometheus overload metrics.
+- The full before-and-after capacity rerun.
+- The 960 req/s round.
+- Recovery-time measurement.
+
+#### README feature evidence
+
+- Categories and transactions are implemented in `app/api/v1/endpoints/categories.py` and `app/api/v1/endpoints/transactions.py`. Integration coverage is in `tests/integration/test_api/test_categories.py` and `tests/integration/test_api/test_transactions.py`.
+- Reports use `app/services/report.py` and `app/core/cache.py`. Report and cache behaviors are covered in `tests/integration/test_api/test_reports.py` and `tests/unit/test_cache.py`.
+- Account flows and email jobs are in `app/api/v1/endpoints/auth.py`, `app/services/auth.py`, and `app/worker/tasks.py`. Coverage is in `tests/integration/test_api/test_auth.py` and `tests/unit/test_worker_tasks.py`.
+- Probes, admission, and the retry header are in `app/api/v1/endpoints/health.py`, `app/core/health.py`, `app/middleware/overload.py`, and `app/api/responses.py`. Coverage is in `tests/integration/test_api/test_health.py` and `tests/unit/test_overload.py`.
+
 ## 2026-11-22 — `codex/audit-and-fixes`
 
 Resolve the audit's runtime and release findings, verify Make targets, and publish evidence in the README. Google OAuth implementation and licensing were deferred at the user's request.
