@@ -53,6 +53,28 @@ The user chose Harbor Ink, Barlow Condensed with Instrument Sans, and the Ledger
 
 Resolved the proposed npm graph in memory, compared it with the public advisory feed, and verified a scoped minimatch override as a proposal only. No package or image was installed. [npm audit](https://docs.npmjs.com/cli/v10/commands/npm-audit/#bulk-advisory-endpoint) · [minimatch advisory](https://github.com/advisories/GHSA-g3hv-75wg-m249)
 
+### Step 5 · Foundation
+
+| File | What changed | Why |
+|---|---|---|
+| `docs/DEPENDENCY_CHANGES.md` | Recorded the approved npm graph and scoped override | Keep package approval and verification traceable |
+| `frontend/.gitignore` | Ignored generated output and local settings | Keep builds and developer values out of Git |
+| `frontend/package.json` | Pinned the approved packages and commands | Provide a reproducible frontend toolchain |
+| `frontend/package-lock.json` | Locked the audited npm graph | Install the same dependencies in CI and Docker |
+| `frontend/index.html` | Added the SPA entry and referrer policy | Mount the browser app without forwarding link tokens |
+| `frontend/vite.config.ts` | Configured Vite and Vitest with a strict same-origin proxy | Run and test the SPA on the required port |
+| `frontend/eslint.config.js` | Configured React and strict TypeScript linting | Catch frontend mistakes with zero warnings |
+| `frontend/tsconfig.json` | Added the Vite project references | Build both TypeScript configurations |
+| `frontend/tsconfig.app.json` | Enabled strict browser and test typing | Check application code before bundling |
+| `frontend/tsconfig.node.json` | Enabled strict tooling and browser runner typing | Check configuration and E2E code |
+| `frontend/public/favicon.svg` | Added the Ledger browser icon | Apply the approved brand |
+| `frontend/public/ledger.svg` | Added the Ledger mark | Apply the approved brand |
+| `frontend/src/app/Brand.tsx` | Added the linked wordmark | Provide an accessible home link |
+| `frontend/src/app/foundation.test.tsx` | Tested the brand and strict proxy settings | Keep the scaffold behavior verifiable |
+| `frontend/src/main.tsx` | Mounted the React root | Boot the SPA in strict mode |
+| `frontend/src/test/setup.ts` | Configured DOM assertions and cleanup | Isolate rendering tests |
+| `docs/CHANGELOG_AI.md` | Recorded this implementation milestone | Track files and reasons |
+
 ## 2026-11-23 — `codex/20261123-overload-and-readme`
 
 Measure API capacity, add overload protection, and update the README. Prepare a Make-only local setup for the API and monitoring.
