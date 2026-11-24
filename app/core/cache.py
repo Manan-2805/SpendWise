@@ -2,10 +2,9 @@ import asyncio
 import json
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import cast
 
 import structlog
-from fastapi import Request, Response
 from redis.exceptions import RedisError
 
 from app.core.redis import redis_client
@@ -64,28 +63,3 @@ async def get_or_set_cache[T](
                 await redis_client.eval(RELEASE_LOCK, 1, lock_key, owner)
             except RedisError:
                 logger.warning("cache_lock_release_failed")
-
-
-def versioned_key_builder(
-    func: Any,
-    namespace: str = "",
-    request: Request | None = None,
-    response: Response | None = None,
-    *args: Any,
-    **kwargs: Any,
-) -> str:
-    from fastapi_cache.key_builder import default_key_builder
-
-    base: str = default_key_builder(
-        func,
-        namespace,
-        request=request,
-        response=response,
-        args=args,
-        kwargs=kwargs,
-    )
-    if request:
-        user: Any | None = getattr(request.state, "user", None)
-        if user and hasattr(user, "cache_version"):
-            return f"{base}:v{user.cache_version}"
-    return base

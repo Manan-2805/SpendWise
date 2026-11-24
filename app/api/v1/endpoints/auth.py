@@ -1,11 +1,7 @@
-from typing import Any
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_cookie_origin
-from app.core.auth import oauth
 from app.core.config import settings
 from app.core.exceptions import (
     InvalidTokenError,
@@ -211,67 +207,3 @@ async def resend_verification(
     auth_service = AuthService(db)
     await auth_service.resend_verification(current_user.email)
     return {"message": "Verification email resent if user is not verified."}
-
-
-@router.get("/google")
-@limiter.limit("5/minute")
-async def google_login(
-    request: Request,
-) -> Any:
-    """Redirect to Google OAuth authorization portal."""
-    if not settings.GOOGLE_OAUTH_ENABLED:
-        raise HTTPException(status_code=400, detail="Google OAuth is not enabled")
-    redirect_uri = settings.GOOGLE_REDIRECT_URI or str(
-        request.url_for("google_callback")
-    )
-    return await oauth.google.authorize_redirect(request, redirect_uri)
-
-
-@router.get("/google/callback")
-async def google_callback(
-    request: Request,
-    response: Response,  # noqa: ARG001
-    db: AsyncSession = Depends(get_db, scope="function"),
-) -> Any:
-    """Handle callback from Google, authenticating and linking accounts."""
-    if not settings.GOOGLE_OAUTH_ENABLED:
-        raise HTTPException(status_code=400, detail="Google OAuth is not enabled")
-    try:
-        token = await oauth.google.authorize_access_token(request)
-    except Exception as e:
-        raise HTTPException(
-            status_code=400, detail="Google authentication failed"
-        ) from e
-
-    user_info = token.get("userinfo")
-    if not user_info:
-        raise HTTPException(
-            status_code=400, detail="Could not retrieve user info from Google"
-        )
-
-    email = user_info.get("email")
-    username = user_info.get("name") or email.split("@")[0]
-    provider_account_id = user_info.get("sub")
-
-    ip_address = request.client.host if request.client else None
-    user_agent = request.headers.get("User-Agent")
-
-    auth_service = AuthService(db)
-    access_token, refresh_token, _user = await auth_service.login_or_register_oauth(
-        provider="google",
-        provider_account_id=provider_account_id,
-        email=email,
-        username=username,
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )
-
-    token_resp = TokenResponse(
-        access_token=access_token,
-        token_type="bearer",  # nosec B106
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    )
-
-    json_response = JSONResponse(content=token_resp.model_dump())
-    set_auth_cookies(json_response, access_token, refresh_token)
-    return json_response

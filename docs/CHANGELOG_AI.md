@@ -9,9 +9,26 @@ Cover transaction and report cache regressions, remove dormant OAuth and unused 
 |---|---|---|
 | `tests/integration/test_api/test_transactions.py` | Assert HTTP 409 for mismatched category type on create and on updates to either field | Exercise the shared type guard through both API write paths |
 | `tests/integration/test_api/test_reports.py` | Prime Redis and verify new monthly cache keys and category breakdowns after rename and reassignment | Catch either missing invalidation while preserving monthly totals |
+| `app/api/v1/endpoints/auth.py` | Remove Google sign-in and callback routes | Retire the dormant provider flow |
+| `app/core/auth.py` | Delete Authlib provider registration | Remove the OAuth client |
+| `app/core/config.py` | Remove Google settings | Remove retired provider configuration |
+| `app/services/auth.py` | Remove provider sign-in and linking logic | Keep the supported account flows |
+| `app/repositories/auth.py` | Remove provider lookup and insert methods | Remove unused persistence operations |
+| `tests/integration/test_api/test_auth.py` | Remove tests for the retired routes | Keep API tests aligned with supported routes |
+| `tests/unit/test_auth_service.py` | Remove tests for the retired provider service | Keep service tests aligned with supported methods |
+| `app/core/cache.py` | Remove the unused profile cache key builder | Drop the remaining fastapi-cache2 reference |
+| `tests/unit/test_cache.py` | Remove the deleted helper's unit test | Keep coverage for the active Redis cache |
+| `pyproject.toml` | Remove seven direct dependencies and Flower's Mypy override | Trim unused runtime and development dependencies |
+| `uv.lock` | Prune removed packages and their unreachable dependencies | Preserve all retained versions |
+| `docs/DEPENDENCY_CHANGES.md` | Record removed versions and reasons | Document the approved dependency changes |
+| `docs/api-contract.md` | Remove the retired Google flow reference | Keep the live API guide current |
+| `docs/openapi.json` | Regenerate the API schema without the Google routes | Publish the current contract |
+| `frontend/src/lib/api/generated.ts` | Regenerate OpenAPI types | Keep the client aligned with the API |
 | `docs/CHANGELOG_AI.md` | Record the final polish changes and verification | Track the changes for this session |
 
 All four new cases passed with the existing rules. In a temporary copy, removing the transaction type guard failed all three transaction cases. Removing either category cache bump independently failed the report case.
+
+The registry metadata request timed out during resolution. The removal-only lockfile was pruned from the existing graph, checked with `uv lock --check --offline`, and compared against the previous package versions. `make openapi` and `npm --prefix frontend run api:generate` regenerated the API contract. [uv locking and syncing](https://docs.astral.sh/uv/concepts/projects/sync/) · [openapi-typescript CLI](https://openapi-ts.dev/cli)
 
 ## 2026-11-23 — `codex/20261123-frontend`
 

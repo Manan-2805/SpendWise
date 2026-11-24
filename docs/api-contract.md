@@ -33,7 +33,7 @@ All paths below are relative to `/api/v1`. The local API binds `127.0.0.1:8000` 
 | `GET /health`, `GET /health/live` | Public | `200`, `status` of `ok` or `alive` respectively |
 | `GET /health/ready` | Public | `200` when ready, otherwise `503`. Body contains `status`, `db`, `redis` and `celery`. |
 
-Google OAuth and account deletion (`DELETE /users/me`) are outside the frontend scope. Public token operations can return `401 INVALID_TOKEN` for expired or invalid links.
+Account deletion (`DELETE /users/me`) is outside the frontend scope. Public token operations can return `401 INVALID_TOKEN` for expired or invalid links.
 
 ## Browser authentication and origin
 

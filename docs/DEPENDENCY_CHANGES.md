@@ -1,6 +1,30 @@
 # Dependency changes
 Every package add, upgrade, or removal: package, version, why, approved by me (date).
 
+## 2026-11-24 · Final polish removals
+
+The final polish request approved these removals on 2026-11-24. The retained lockfile versions stayed the same.
+
+| Removed package | Locked version | Reason |
+|---|---|---|
+| `authlib` | 1.9.10 | Google OAuth integration removed |
+| `types-authlib` | 1.6.11.20260518 | Type stubs for the removed integration |
+| `gunicorn` | 26.0.0 | Runtime uses Granian and development uses Uvicorn |
+| `flower` | 2.0.1 | No Flower service or command |
+| `coredis` | 6.7.0 | The application uses redis-py |
+| `jinja2` | 3.1.6 | The application has no Jinja templates |
+| `fastapi-cache2` | 0.2.2 | Removed the unused cache key helper |
+| `beartype` | 0.22.9 | Unreachable after direct dependency removals |
+| `cffi` | 2.0.0 | Unreachable after direct dependency removals |
+| `cryptography` | 50.0.2 | Unreachable after direct dependency removals |
+| `exceptiongroup` | 1.3.1 | Unreachable after direct dependency removals |
+| `humanize` | 4.15.0 | Unreachable after direct dependency removals |
+| `joserfc` | 1.8.0 | Unreachable after direct dependency removals |
+| `pendulum` | 3.2.0 | Unreachable after direct dependency removals |
+| `pycparser` | 3.0 | Unreachable after direct dependency removals |
+| `pytz` | 2026.2 | Unreachable after direct dependency removals |
+| `tornado` | 6.6.1 | Unreachable after direct dependency removals |
+
 ## 2026-11-23 · SpendWise frontend foundation proposal
 
 Status **approved for installation on 2026-11-23**, including the scoped minimatch override. Step 4 reverified all exact pins, engines, required peers, and the selected shadcn and AnimateIcons dependencies. A second lockfile-only resolution reconciled npm’s optional Ajv peer placement, then strict npm ci installed the pinned graph and npm audit reported zero vulnerabilities. The [implementation plan](plans/2026-11-23-frontend.md#dependency-verification) records the registry audit, one moderate transitive advisory, and the proposed scoped `minimatch@11.0.9` override approved for the scoped dependency. The build will lock the approved versions with npm and report any additional direct dependency before adding it. Existing Python dependencies are unaffected.

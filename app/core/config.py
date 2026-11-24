@@ -45,11 +45,6 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    GOOGLE_OAUTH_ENABLED: bool = False
-    GOOGLE_CLIENT_ID: str = ""
-    GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REDIRECT_URI: str = ""
-
     FRONTEND_URL: str = "http://localhost:3000"
     CORS_ORIGINS: Annotated[list[str], NoDecode] = []
     TRUSTED_HOSTS: list[str] = []

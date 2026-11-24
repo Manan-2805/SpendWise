@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.auth import OAuthAccount, RefreshToken
+from app.models.auth import RefreshToken
 from app.models.user import User
 
 
@@ -98,37 +98,3 @@ class AuthRepository:
         stmt = delete(RefreshToken).where(RefreshToken.expires_at < datetime.now(UTC))
         result = await self.session.execute(stmt)
         return int(result.rowcount)  # type: ignore[attr-defined]
-
-    async def get_oauth_account(
-        self, provider: str, provider_account_id: str
-    ) -> OAuthAccount | None:
-        """Get an OAuth account by provider and provider_account_id."""
-        stmt = select(OAuthAccount).where(
-            OAuthAccount.provider == provider,
-            OAuthAccount.provider_account_id == provider_account_id,
-        )
-        result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
-
-    async def create_oauth_account(
-        self,
-        user_id: int,
-        provider: str,
-        provider_account_id: str,
-        access_token: str | None = None,
-        refresh_token: str | None = None,
-        expires_at: int | None = None,
-    ) -> OAuthAccount:
-        """Create and link a new OAuth account to a user."""
-        account = OAuthAccount(
-            user_id=user_id,
-            provider=provider,
-            provider_account_id=provider_account_id,
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_at=expires_at,
-        )
-        self.session.add(account)
-        await self.session.flush()
-        await self.session.refresh(account)
-        return account
