@@ -13,6 +13,7 @@ from app.core.exceptions import (
     InvalidCredentialsError,
     InvalidTokenError,
     OverloadedError,
+    ServiceUnavailableError,
 )
 from app.core.security import (
     create_access_token,
@@ -340,22 +341,45 @@ class AuthService:
             user_id=user.id,
         )
 
-    async def resend_verification(self, email: str) -> None:
-        """Generate and resend email verification token via Celery."""
+    async def resend_verification(
+        self, email: str, *, confirm_delivery: bool = False
+    ) -> bool:
+        """Queue registration mail or confirm SMTP acceptance for an explicit resend."""
         user = await self.user_service.repo.get_by_email(email)
-        if not user:
-            return
-        if user.is_verified:
-            return
+        if not user or user.is_verified:
+            return False
+        if confirm_delivery and (not settings.SMTP_HOST or not settings.SMTP_FROM):
+            raise ServiceUnavailableError("verification email service")
 
         token = secrets.token_urlsafe(32)
+        recipient = user.email
         await self.user_service.repo.update(
             user.id,
             verification_token=hash_refresh_token(token),
             verification_token_expires_at=datetime.now(UTC) + timedelta(days=1),
         )
 
-        from app.worker.tasks import send_verification_email
+        from app.worker.tasks import (
+            EmailDeliveryError,
+            _send_email,
+            send_verification_email,
+        )
+
+        if confirm_delivery:
+            # Make the link usable before handing it to the relay.
+            await self.db.commit()
+            try:
+                await asyncio.to_thread(
+                    _send_email,
+                    recipient,
+                    "Verify your SpendWise email",
+                    "verify-email",
+                    token,
+                )
+            except EmailDeliveryError:
+                logger.warning("verification_email_rejected")
+                raise ServiceUnavailableError("verification email service") from None
+            return True
 
         ctx = structlog.contextvars.get_contextvars()
 
@@ -369,3 +393,4 @@ class AuthService:
             )
 
         after_commit(self.db, enqueue)
+        return True

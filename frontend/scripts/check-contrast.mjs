@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
-const roles = { ink: 4.5, muted: 4.5, income: 4.5, expense: 4.5, focus: 3 };
+const roles = { ink: 4.5, muted: 4.5, income: 4.5, expense: 4.5, warning: 4.5, focus: 3 };
 const rows = [];
 let failed = false;
 

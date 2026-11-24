@@ -18,6 +18,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       closeButton
+      richColors
       toastOptions={{ className: "glass-surface" }}
       icons={{
         success: <CheckIcon className="size-4" aria-hidden="true" />,
@@ -31,7 +32,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-bg": "var(--surface)",
           "--normal-text": "var(--ink)",
           "--normal-border": "var(--line)",
-          "--border-radius": ".65rem",
+          "--success-text": "var(--income)",
+          "--warning-text": "var(--warning)",
+          "--error-text": "var(--expense)",
+          "--border-radius": "1rem",
         } as React.CSSProperties
       }
       {...props}

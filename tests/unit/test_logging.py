@@ -58,3 +58,16 @@ def test_production_logging_preserves_json_renderer() -> None:
     assert isinstance(
         structlog.get_config()["processors"][-1], structlog.processors.JSONRenderer
     )
+
+
+def test_development_does_not_log_raw_access_urls() -> None:
+    import logging
+
+    access = logging.getLogger("uvicorn.access")
+    previous = access.level
+    try:
+        access.setLevel(logging.INFO)
+        configure_logging(debug=True)
+        assert not access.isEnabledFor(logging.INFO)
+    finally:
+        access.setLevel(previous)

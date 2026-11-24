@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import { clearAccount, queryClient, sessionKey } from '@/app/query'
-import { TextField, Message } from '@/components/fields'
+import { TextField, Message, PasswordField } from '@/components/fields'
 import { Button } from '@/components/ui/button'
 import { api, unwrap } from '@/lib/api/client'
 import type { User } from '@/lib/api/client'
@@ -68,9 +68,9 @@ function ChangePassword() {
   return <section className="surface stack">
     <h2>Change password</h2>
     <form className="stack" noValidate onSubmit={handleSubmit(data => change.mutateAsync(data).catch(() => {}))}>
-      <TextField id="old-password" label="Current password" type="password" autoComplete="current-password" error={errors.current_password?.message} {...register('current_password')} />
-      <TextField id="new-password" label="New password" type="password" autoComplete="new-password" error={errors.new_password?.message} {...register('new_password')} />
-      <TextField id="confirm-new-password" label="Confirm new password" type="password" autoComplete="new-password" error={errors.confirm_new_password?.message} {...register('confirm_new_password')} />
+      <PasswordField id="old-password" label="Current password" autoComplete="current-password" error={errors.current_password?.message} {...register('current_password')} />
+      <PasswordField id="new-password" label="New password" autoComplete="new-password" error={errors.new_password?.message} {...register('new_password')} />
+      <PasswordField id="confirm-new-password" label="Confirm new password" autoComplete="new-password" error={errors.confirm_new_password?.message} {...register('confirm_new_password')} />
       {errors.root?.message && <Message error>{errors.root.message}</Message>}
       <div><Button disabled={change.isPending} type="submit">Change password</Button></div>
     </form>

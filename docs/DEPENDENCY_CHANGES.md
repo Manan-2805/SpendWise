@@ -27,7 +27,7 @@ The final polish request approved these removals on 2026-11-24. The retained loc
 
 ## 2026-11-23 · SpendWise frontend foundation proposal
 
-Status **approved for installation on 2026-11-23**, including the scoped minimatch override. Step 4 reverified all exact pins, engines, required peers, and the selected shadcn and AnimateIcons dependencies. A second lockfile-only resolution reconciled npm’s optional Ajv peer placement, then strict npm ci installed the pinned graph and npm audit reported zero vulnerabilities. The [implementation plan](plans/2026-11-23-frontend.md#dependency-verification) records the registry audit, one moderate transitive advisory, and the proposed scoped `minimatch@11.0.9` override approved for the scoped dependency. The build will lock the approved versions with npm and report any additional direct dependency before adding it. Existing Python dependencies are unaffected.
+Status **approved for installation on 2026-11-23**, including the scoped minimatch override. Step 4 reverified all exact pins, engines, required peers, and the selected shadcn and AnimateIcons dependencies. A second lockfile-only resolution reconciled npm’s optional Ajv peer placement, then strict npm ci installed the pinned graph and npm audit reported zero vulnerabilities. The original implementation plan recorded the registry audit, one moderate transitive advisory, and the proposed scoped `minimatch@11.0.9` override approved for the scoped dependency. The build will lock the approved versions with npm and report any additional direct dependency before adding it. Existing Python dependencies are unaffected.
 
 ### Application dependencies
 
