@@ -22,17 +22,17 @@
 :root {
   color-scheme: light;
   font-family: "Instrument Sans Variable", sans-serif;
-  --canvas: oklch(0.952 0.020 160);
-  --surface: oklch(0.987 0.008 158);
-  --ink: oklch(0.268 0.033 167);
-  --muted: oklch(0.450 0.033 161);
+  --canvas: oklch(0.952 0.020 236);
+  --surface: oklch(0.987 0.005 232);
+  --ink: oklch(0.253 0.043 250);
+  --muted: oklch(0.445 0.042 247);
   --income: oklch(0.405 0.074 164);
   --expense: oklch(0.435 0.150 22);
   --warning: oklch(0.452 0.086 75);
-  --focus: oklch(0.414 0.079 164);
-  --glass-fill: oklch(0.970 0.024 161 / 0.72);
-  --glass-edge: oklch(0.996 0.005 160 / 0.91);
-  --glass-shadow: oklch(0.264 0.069 173 / 0.17);
+  --focus: oklch(0.423 0.101 247);
+  --glass-fill: oklch(0.961 0.026 231 / 0.72);
+  --glass-edge: oklch(0.995 0.005 232 / 0.91);
+  --glass-shadow: oklch(0.264 0.056 247 / 0.17);
   --line: color-mix(in oklch, var(--ink) 24%, var(--surface));
   --control-border: color-mix(in oklch, var(--muted) 75%, var(--surface));
   --subtle: color-mix(in oklch, var(--focus) 12%, var(--surface));
@@ -41,21 +41,21 @@
 }
 :root.dark {
   color-scheme: dark;
-  --canvas: oklch(0.230 0.031 169);
-  --surface: oklch(0.284 0.036 170);
-  --ink: oklch(0.949 0.018 167);
-  --muted: oklch(0.761 0.031 165);
+  --canvas: oklch(0.225 0.035 250);
+  --surface: oklch(0.277 0.046 249);
+  --ink: oklch(0.948 0.020 232);
+  --muted: oklch(0.759 0.035 239);
   --income: oklch(0.808 0.107 163);
   --expense: oklch(0.775 0.122 24);
   --warning: oklch(0.842 0.105 84);
-  --focus: oklch(0.814 0.105 164);
-  --glass-fill: oklch(0.293 0.049 168 / 0.75);
-  --glass-edge: oklch(0.73 0.071 165 / 0.44);
-  --glass-shadow: oklch(0.15 0.035 170 / 0.5);
+  --focus: oklch(0.817 0.091 229);
+  --glass-fill: oklch(0.292 0.055 246 / 0.75);
+  --glass-edge: oklch(0.73 0.073 226 / 0.44);
+  --glass-shadow: oklch(0.15 0.043 253 / 0.5);
 }
 body { min-width: 300px; margin: 0; background:
-  radial-gradient(ellipse at 10% 2%, oklch(0.81 0.09 155 / .27), transparent 42rem),
-  radial-gradient(ellipse at 96% 20%, oklch(0.74 0.085 225 / .2), transparent 38rem),
+  radial-gradient(ellipse at 10% 2%, oklch(0.82 0.085 226 / .27), transparent 42rem),
+  radial-gradient(ellipse at 96% 20%, oklch(0.76 0.09 269 / .2), transparent 38rem),
   var(--canvas);
   min-height: 100vh;
 }
@@ -127,10 +127,10 @@ a { text-underline-offset: .2em; }
   overflow: hidden;
   border-radius: 2.4rem;
   background:
-    radial-gradient(ellipse at 28% 20%, #eafeb0 0%, transparent 51%),
-    radial-gradient(ellipse at 92% 72%, #438fd0, transparent 62%),
-    radial-gradient(ellipse at 78% 12%, #dc8689, transparent 44%),
-    linear-gradient(135deg, #136144, #2d8c6d 58%, #153e50);
+    radial-gradient(ellipse at 28% 20%, #dbf7ff 0%, transparent 51%),
+    radial-gradient(ellipse at 92% 72%, #458cd7, transparent 62%),
+    radial-gradient(ellipse at 78% 12%, #a9aaff, transparent 44%),
+    linear-gradient(135deg, #1a547b, #369bc4 58%, #243965);
 }
 .auth-art::after {
   content: "";
@@ -140,7 +140,7 @@ a { text-underline-offset: .2em; }
   background: repeating-linear-gradient(115deg, transparent 0 68px, #fff2 69px, transparent 70px 100px);
   mask-image: linear-gradient(130deg, #000, transparent 78%);
 }
-.auth-orbit { position: absolute; inset: 18% 8%; border: 1px solid #edfff78f; border-radius: 50%; transform: rotate(-25deg); }
+.auth-orbit { position: absolute; inset: 18% 8%; border: 1px solid #eefaff9d; border-radius: 50%; transform: rotate(-25deg); }
 .auth-prism {
   position: absolute;
   width: clamp(7rem, 20vw, 14rem);
@@ -148,15 +148,15 @@ a { text-underline-offset: .2em; }
   display: grid;
   place-items: center;
   border-radius: 30%;
-  border: 1px solid #effffed1;
-  background: linear-gradient(140deg, #fff8, #fff1 46%, #c6fff34d 80%);
+  border: 1px solid #effaffd1;
+  background: linear-gradient(140deg, #fff8, #fff1 46%, #c2ebff65 80%);
   backdrop-filter: blur(12px) saturate(150%);
-  box-shadow: inset 0 1px 2px #fff, inset -2px -2px 6px #dafffd86, 0 24px 42px #153c5570;
+  box-shadow: inset 0 1px 2px #fff, inset -2px -2px 6px #ddf7ff86, 0 24px 42px #153c5570;
 }
 .auth-prism-back { left: 32%; top: 18%; rotate: -24deg; }
 .auth-prism-front { left: 47%; top: 26%; animation: glass-float 7s ease-in-out infinite alternate; rotate: 12deg; }
-.auth-prism-front img { width: 43%; height: auto; filter: drop-shadow(0 6px 10px #123a3659); }
-.auth-spark { position: absolute; left: 22%; top: 66%; width: .65rem; aspect-ratio: 1; border-radius: 50%; background: #f4ffdf; box-shadow: 0 0 20px 6px #eaffc18c; }
+.auth-prism-front img { width: 43%; height: auto; filter: drop-shadow(0 6px 10px #15386459); }
+.auth-spark { position: absolute; left: 22%; top: 66%; width: .65rem; aspect-ratio: 1; border-radius: 50%; background: #effbff; box-shadow: 0 0 20px 6px #d8f7ff9c; }
 @keyframes glass-float { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-.5rem, -.9rem, 0) rotate(-5deg); } }
 .password-control { position: relative; display: grid; align-items: center; }
 .password-control input { padding-inline-end: 3.2rem; }

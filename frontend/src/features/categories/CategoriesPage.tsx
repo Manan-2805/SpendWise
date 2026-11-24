@@ -82,7 +82,7 @@ function Editor({ category, close }: { category?: Category; close: () => void })
       <div className="stack">
         <Field id="category-color" label="Category color" error={errors.color?.message}>
           <div className="inline-actions">
-            <input id="category-color" type="color" value={color || '#29785b'}
+            <input id="category-color" type="color" value={color || '#286699'}
               onInput={event => setValue('color', event.currentTarget.value, { shouldDirty: true })} />
             {color && <Button type="button" variant="ghost" onClick={() => setValue('color', '', { shouldDirty: true })}>Clear color</Button>}
           </div>

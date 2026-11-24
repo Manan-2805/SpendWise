@@ -16,7 +16,7 @@ test('paints the saved theme while the JavaScript bundle is still loading', asyn
     await page.goto('/login', { waitUntil: 'commit' })
     await expect(page.getByRole('status')).toHaveText('Loading SpendWise…')
     await expect(page.locator('html')).toHaveClass('dark')
-    await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(16, 39, 33)')
+    await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(16, 28, 45)')
   } finally {
     allowScripts()
   }

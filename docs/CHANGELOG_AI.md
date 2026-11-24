@@ -1,6 +1,28 @@
 # AI change log
 Every change made by an AI agent: file, what, why. Newest session first.
 
+## 2026-11-24 — `codex/20261124-glass-and-verification` · Icy-blue finish
+
+Apply the requested blue glass palette and clarify the settings needed for external SMTP delivery.
+
+| File | What changed | Why |
+|---|---|---|
+| `frontend/src/styles.css` | Switch light and dark surfaces, navigation accents, and glass artwork to blue and violet | Apply the requested palette while preserving semantic feedback colors |
+| `frontend/index.html` | Update the critical first-paint colors | Match the loaded theme while JavaScript starts |
+| `frontend/e2e/spendwise.spec.ts` | Assert the new dark first-paint color | Keep the startup flash regression current |
+| `frontend/src/features/categories/CategoriesPage.tsx` | Use a blue default swatch | Match the category editor to the app palette |
+| `README.md` | Add a copyable SMTP template, sender and sandbox requirements, and production origin setup | Explain how to send real email and open verification links |
+| `docs/screenshots/frontend/sign-in.png` | Recapture the sign-in artwork | Show the requested palette |
+| `docs/screenshots/frontend/categories.png` | Recapture the category table | Show the requested palette |
+| `docs/screenshots/frontend/dashboard-light.png` | Recapture the light dashboard | Keep the README preview current |
+| `docs/screenshots/frontend/dashboard-dark.png` | Recapture the dark dashboard | Keep the README preview current |
+| `docs/screenshots/frontend/transactions-mobile.png` | Recapture mobile transactions | Show the blue theme at phone width |
+| `docs/CHANGELOG_AI.md` | Record the follow-up changes | Track the session |
+
+The Docker runtime was checked without printing SMTP settings. It still uses Mailpit, with external host and credentials unset. [Amazon SES SMTP credentials](https://docs.aws.amazon.com/ses/latest/dg/smtp-credentials.html) · [Amazon SES sandbox requirements](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html)
+
+`make check` passed with 184 tests and 88.18% coverage after retrying a PyPI timeout. `make frontend-check` passed with 29 tests, and both Chromium tests passed against the rebuilt Docker frontend.
+
 ## 2026-11-24 — `codex/20261124-glass-and-verification`
 
 Refresh the SpendWise interface, make verification delivery observable, and run the development app in Docker.

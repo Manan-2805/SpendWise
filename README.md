@@ -28,9 +28,25 @@ Open [SpendWise](http://localhost:3000) and sign in with the demo account printe
 
 The Docker development stack sends mail to [Mailpit](http://localhost:8025). Mailpit captures mail locally, including mail addressed to a real email address. Sign up or select **Send verification email**, open the message in Mailpit, and follow the link back to SpendWise.
 
-For delivery to a real inbox, set the Docker development overrides in the ignored local `.env`. Use `SPENDWISE_DEV_SMTP_HOST`, `SPENDWISE_DEV_SMTP_PORT`, `SPENDWISE_DEV_SMTP_FROM`, `SPENDWISE_DEV_SMTP_USERNAME`, `SPENDWISE_DEV_SMTP_PASSWORD`, and `SPENDWISE_DEV_SMTP_STARTTLS=true`. Choose a sender approved by your provider. Set `SPENDWISE_DEV_FRONTEND_URL` to the URL recipients can reach and rerun `make up`. A successful explicit send confirms that the relay accepted the message. Inbox delivery depends on the provider and recipient.
+To send to a real inbox, get SMTP credentials and approve a sender address or domain with your email provider. Some providers restrict sandbox accounts to approved recipients. For example, Amazon SES requires production access to send to arbitrary recipients. [Amazon SES SMTP credentials](https://docs.aws.amazon.com/ses/latest/dg/smtp-credentials.html) · [SES sandbox limits](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html)
+
+Add the provider settings directly to your ignored local `.env`. Replace the example values with your own.
+
+```dotenv
+SPENDWISE_DEV_SMTP_HOST=smtp.example.com
+SPENDWISE_DEV_SMTP_PORT=587
+SPENDWISE_DEV_SMTP_FROM=notifications@example.com
+SPENDWISE_DEV_SMTP_USERNAME=your-smtp-username
+SPENDWISE_DEV_SMTP_PASSWORD=your-smtp-password
+SPENDWISE_DEV_SMTP_STARTTLS=true
+SPENDWISE_DEV_FRONTEND_URL=http://localhost:3000
+```
+
+Use your provider's STARTTLS endpoint, typically port 587. A local URL works when you open the email link on the machine running SpendWise. For someone opening it elsewhere, set `SPENDWISE_DEV_FRONTEND_URL` to an HTTPS address they can reach. Run `make up` to apply the settings and choose **Send verification email**. The app reports relay acceptance or failure. Use the provider's delivery log to check what happens after acceptance.
 
 ## Development checks
+
+Install uv and Node.js 22.23.5 to run the checks on your machine.
 
 ```sh
 make install
@@ -41,7 +57,7 @@ make frontend-check
 
 The backend suite starts disposable PostgreSQL and Redis and enforces 85% line coverage. Frontend checks cover lint, type checking, Vitest, production build, contrast, and bundle budgets. With Playwright Chromium and its dependencies available, `make frontend-e2e` exercises the browser flow against disposable services.
 
-To run the browser tests against the running Docker app, use `SPENDWISE_E2E_BASE_URL=http://localhost:3000 npm --prefix frontend exec -- playwright test`.
+To run the browser tests against the running Docker app, use `SPENDWISE_E2E_BASE_URL=http://localhost:3000 npm --prefix frontend exec -- playwright test`. That run creates a test account and sample data in the development database.
 
 Regenerate API types with `make openapi` and `npm --prefix frontend run api:generate`.
 
@@ -58,5 +74,5 @@ Regenerate API types with `make openapi` and `npm --prefix frontend run api:gene
 ## Operations
 
 - `make up` starts the Docker app with existing images. `make down` removes the containers and keeps the database volume.
-- Production uses private PostgreSQL and Redis, a configured SMTP relay, and HTTPS ingress. Supply the required settings in `docker-compose.prod.yml`, run `make prod-migrate` once with the migration role, then run `make prod-up`.
+- Production uses private PostgreSQL and Redis and HTTPS ingress. Set the environment variables listed in `docker-compose.prod.yml` through your deployment configuration, with credentials in its secret store. Use the `SPENDWISE_SMTP_*` variables for real mail, set `SPENDWISE_FRONTEND_URL` to the public HTTPS URL, and allow that exact origin in `SPENDWISE_CORS_ORIGINS`. Run `make prod-migrate` once with the migration role, then run `make prod-up`.
 - See the [API contract](docs/api-contract.md) for authentication and proxy configuration and the [PostgreSQL restore runbook](docs/RESTORE.md) for backup and recovery.
