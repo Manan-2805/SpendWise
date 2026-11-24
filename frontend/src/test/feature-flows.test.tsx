@@ -8,6 +8,7 @@ import { setupServer } from 'msw/node'
 import { queryClient, sessionKey } from '@/app/query'
 import { WorkspaceLayout } from '@/app/Layouts'
 import { ForgotPage, LoginPage, RegisterPage, ResetPage, VerifyPage } from '@/features/auth/AuthPages'
+import { VerificationNotice } from '@/features/auth/VerificationNotice'
 import CategoriesPage from '@/features/categories/CategoriesPage'
 import TransactionsPage from '@/features/transactions/TransactionsPage'
 import DashboardPage from '@/features/dashboard/DashboardPage'
@@ -44,6 +45,41 @@ function show(path: string, element: React.ReactElement) {
 }
 
 describe('feature flows', () => {
+  it('filters categories in the accessible table and opens a color picker', async () => {
+    server.use(http.get(base + '/categories/', () => HttpResponse.json([
+      category, { ...category, id: 43, name: 'Salary', type: 'income' },
+    ])))
+    show('/categories', <CategoriesPage />)
+    const table = await screen.findByRole('table', { name: 'Categories' })
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search categories' }), 'salary')
+    expect(within(table).getByText('Salary')).toBeVisible()
+    expect(within(table).queryByText('Studio')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Salary' }))
+    expect(screen.getByLabelText('Category color')).toHaveAttribute('type', 'color')
+    expect(screen.getByLabelText('Upload icon image')).toHaveAttribute('type', 'file')
+  })
+
+  it('gives password managers sign-in hints and lets the user reveal the password', async () => {
+    show('/login', <LoginPage />)
+    expect(screen.getByLabelText('Email')).toHaveAttribute('autocomplete', 'username')
+    const password = screen.getByLabelText('Password', { exact: true })
+    expect(password).toHaveAttribute('autocomplete', 'current-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Show password' }))
+    expect(password).toHaveAttribute('type', 'text')
+    await userEvent.click(screen.getByRole('button', { name: 'Hide password' }))
+    expect(password).toHaveAttribute('type', 'password')
+  })
+
+  it('shows a verification delivery failure in the account notice', async () => {
+    server.use(http.post(base + '/auth/resend-verification', () => HttpResponse.json({
+      detail: 'The verification email service is currently unavailable',
+      code: 'SERVICE_UNAVAILABLE',
+    }, { status: 503 })))
+    show('/', <VerificationNotice />)
+    await userEvent.click(screen.getByRole('button', { name: 'Send verification email' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('verification email service is currently unavailable')
+  })
+
   it('presents a runtime login field error and keeps the entered email', async () => {
     server.use(http.post(base + '/auth/login', () => HttpResponse.json({
       detail: 'Request validation failed', code: 'VALIDATION_ERROR',
@@ -138,7 +174,9 @@ describe('feature flows', () => {
     )
     show('/categories', <CategoriesPage />)
     const input = userEvent.setup()
-    expect(await screen.findByText('Expense · System category')).toBeVisible()
+    const shared = await screen.findByRole('row', { name: /Shared/ })
+    expect(within(shared).getByRole('cell', { name: 'Expense' })).toBeVisible()
+    expect(within(shared).getByRole('cell', { name: 'System category' })).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Delete Shared' })).not.toBeInTheDocument()
     await input.click(screen.getByRole('button', { name: 'Add category' }))
     let dialog = await screen.findByRole('dialog', { name: 'Add category' })
@@ -152,7 +190,7 @@ describe('feature flows', () => {
     await input.click(await screen.findByRole('button', { name: 'Delete Workspace' }))
     dialog = await screen.findByRole('dialog', { name: 'Delete category?' })
     await input.click(within(dialog).getByRole('button', { name: 'Delete category' }))
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Workspace' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('row', { name: /Workspace/ })).not.toBeInTheDocument())
   })
 
   it('sends transaction decimals as strings and omits unchanged PATCH fields', async () => {

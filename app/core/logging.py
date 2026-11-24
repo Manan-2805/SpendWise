@@ -114,7 +114,8 @@ def configure_logging(debug: bool = False) -> None:
         force=True,
     )
 
+    # ASGI server access logs include query strings, including emailed link tokens.
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     if not debug:
-        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
         logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
         logging.getLogger("httpx").setLevel(logging.WARNING)

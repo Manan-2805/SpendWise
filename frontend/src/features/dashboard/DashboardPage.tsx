@@ -30,7 +30,7 @@ export default function DashboardPage() {
   })
   return <div className="stack">
     <div className="page-heading">
-      <div><p>{session.data ? `Ledger for ${session.data.username}` : 'Your ledger'}</p><h1>A month in view</h1></div>
+      <h1>A month in view</h1>
       <Button asChild><Link to="/transactions?new=1"><Plus aria-hidden="true" />Add transaction</Link></Button>
     </div>
     <div className="flex flex-wrap items-end justify-between gap-3">

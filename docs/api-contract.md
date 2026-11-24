@@ -16,7 +16,7 @@ All paths below are relative to `/api/v1`. The local API binds `127.0.0.1:8000` 
 | `POST /auth/forgot-password` | `email` | `200`, same generic message for known and unknown addresses |
 | `POST /auth/reset-password` | `token`, `new_password`, `confirm_new_password` | `200`, `{ "message": "Password reset successfully. Please log in again." }`, all sessions revoked |
 | `GET /auth/verify-email` | `token` query parameter | `200`, `{ "message": "Email verified successfully." }` |
-| `POST /auth/resend-verification` | Authenticated, empty body | `200`, queues a fresh token for an unverified user |
+| `POST /auth/resend-verification` | Authenticated, empty body | `200` after SMTP acceptance or if already verified. `503 SERVICE_UNAVAILABLE` if SMTP is unavailable |
 | `GET /transactions/` | Authenticated, optional filters, sort and pagination | `200`, paginated transaction list |
 | `POST /transactions/` | Authenticated, transaction create payload | `201`, created transaction |
 | `GET /transactions/{id}` | Authenticated | `200`, transaction with category details when present |
@@ -72,7 +72,7 @@ Email and username comparisons and stored values are normalized to lowercase. Us
 
 Celery sends `${FRONTEND_URL}/verify-email?token=…` and `${FRONTEND_URL}/reset-password?token=…` with a URL-encoded, single-use token. The default `FRONTEND_URL` is `http://localhost:3000`. Verification tokens last 24 hours and reset tokens last one hour. The frontend verification route calls the API GET with the token. The frontend reset route submits the token with the new password and confirmation to the API POST.
 
-If `SMTP_HOST` or `SMTP_FROM` is unset, the worker skips delivery. The API has no endpoint that returns an email link, and the database stores only a hash. For local manual testing, configure an SMTP catcher or sandbox such as Mailtrap after approval. With SMTP disabled, use a disposable test fixture that captures the task argument in memory before Celery delivery, as the reset integration test does. No email tooling or configuration was added.
+The Docker development stack sends mail to Mailpit by default. Registration queues the initial verification email. An authenticated verification resend waits for SMTP acceptance and returns a service error on missing configuration, connection failure, or relay rejection. The frontend presents that error in the verification notice. SMTP acceptance cannot confirm inbox delivery. The API keeps link tokens out of responses and stores only their hashes.
 
 ## Lists, dates, and amounts
 

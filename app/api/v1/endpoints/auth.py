@@ -196,7 +196,10 @@ async def verify_email(
     return {"message": "Email verified successfully."}
 
 
-@router.post("/resend-verification")
+@router.post(
+    "/resend-verification",
+    responses={503: {"description": "Verification email unavailable"}},
+)
 @limiter.limit("2/minute")
 async def resend_verification(
     request: Request,  # noqa: ARG001
@@ -205,5 +208,9 @@ async def resend_verification(
 ) -> dict[str, str]:
     """Resend email verification link for the current user."""
     auth_service = AuthService(db)
-    await auth_service.resend_verification(current_user.email)
-    return {"message": "Verification email resent if user is not verified."}
+    sent = await auth_service.resend_verification(
+        current_user.email, confirm_delivery=True
+    )
+    if not sent:
+        return {"message": "Your email is already verified."}
+    return {"message": "Verification email accepted by the mail server."}

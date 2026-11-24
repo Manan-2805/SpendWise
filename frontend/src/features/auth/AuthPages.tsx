@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
-import { Message, TextField } from '@/components/fields'
+import { Message, PasswordField, TextField } from '@/components/fields'
 import { api, discardSessionBody, unwrap } from '@/lib/api/client'
 import { showFormError } from '@/lib/forms'
 import { queryClient, sessionKey } from '@/app/query'
@@ -15,10 +15,16 @@ import { loadSignedInUser } from './session'
 
 function GuestPage({ title, text, children }: { title: string; text: string; children: ReactNode }) {
   return <div className="auth-grid">
-    <div className="auth-intro">
-      <p>Your personal ledger</p><h1>{title}</h1><p>{text}</p>
+    <div className="auth-art" aria-hidden="true">
+      <div className="auth-orbit" />
+      <div className="auth-prism auth-prism-back" />
+      <div className="auth-prism auth-prism-front"><img src="/ledger.svg" width="92" height="92" alt="" /></div>
+      <div className="auth-spark" />
     </div>
-    <section className="surface stack auth-form" aria-label={title}>{children}</section>
+    <section className="surface glass-surface stack auth-form" aria-labelledby="guest-heading">
+      <div className="auth-intro"><h1 id="guest-heading">{title}</h1><p>{text}</p></div>
+      {children}
+    </section>
   </div>
 }
 
@@ -39,9 +45,9 @@ export function LoginPage() {
 
   return <GuestPage title="Sign in" text="See what came in, what went out, and where you stand.">
     {notice && <Message>{notice}</Message>}
-    <form className="stack" noValidate onSubmit={handleSubmit(data => login.mutateAsync(data).catch(() => {}))}>
-      <TextField id="login-email" label="Email" type="email" autoComplete="email" error={errors.email?.message} {...register('email')} />
-      <TextField id="login-password" label="Password" type="password" autoComplete="current-password" error={errors.password?.message} {...register('password')} />
+    <form className="stack" method="post" autoComplete="on" noValidate onSubmit={handleSubmit(data => login.mutateAsync(data).catch(() => {}))}>
+      <TextField id="login-email" label="Email" type="email" autoComplete="username" autoCapitalize="none" error={errors.email?.message} {...register('email')} />
+      <PasswordField id="login-password" label="Password" autoComplete="current-password" error={errors.password?.message} {...register('password')} />
       {errors.root?.message && <Message error>{errors.root.message}</Message>}
       <Button type="submit" disabled={login.isPending}>{login.isPending ? 'Signing in…' : 'Sign in'}</Button>
     </form>
@@ -61,11 +67,11 @@ export function RegisterPage() {
   }, onSuccess: () => { void navigate('/', { replace: true }) },
   onError: error => showFormError(error, setError, ['email', 'username', 'password', 'confirm_password'], 'confirm_password') })
   return <GuestPage title="Create an account" text="Start a personal ledger for your everyday spending.">
-    <form className="stack" noValidate onSubmit={handleSubmit(data => mutation.mutateAsync(data).catch(() => {}))}>
-      <TextField id="register-email" label="Email" type="email" autoComplete="email" error={errors.email?.message} {...register('email')} />
-      <TextField id="register-username" label="Username" autoComplete="username" error={errors.username?.message} {...register('username')} />
-      <TextField id="register-password" label="Password" type="password" autoComplete="new-password" error={errors.password?.message} {...register('password')} />
-      <TextField id="register-confirm" label="Confirm password" type="password" autoComplete="new-password" error={errors.confirm_password?.message} {...register('confirm_password')} />
+    <form className="stack" method="post" autoComplete="on" noValidate onSubmit={handleSubmit(data => mutation.mutateAsync(data).catch(() => {}))}>
+      <TextField id="register-email" label="Email" type="email" autoComplete="username" autoCapitalize="none" error={errors.email?.message} {...register('email')} />
+      <TextField id="register-username" label="Username" autoComplete="nickname" error={errors.username?.message} {...register('username')} />
+      <PasswordField id="register-password" label="Password" autoComplete="new-password" error={errors.password?.message} {...register('password')} />
+      <PasswordField id="register-confirm" label="Confirm password" autoComplete="new-password" error={errors.confirm_password?.message} {...register('confirm_password')} />
       {errors.root?.message && <Message error>{errors.root.message}</Message>}
       <Button type="submit" disabled={mutation.isPending}>{mutation.isPending ? 'Creating account…' : 'Create account'}</Button>
     </form>
@@ -116,10 +122,10 @@ export function ResetPage() {
     onError: error => showFormError(error, setError, ['new_password', 'confirm_new_password'], 'confirm_new_password'),
   })
   return <GuestPage title="Reset password" text="Choose a password for your SpendWise account.">
-    {reset.isSuccess ? <Message>{reset.data.message}</Message> : token ?
+    {reset.isSuccess ? <Message tone="success">{reset.data.message}</Message> : token ?
       <form className="stack" noValidate onSubmit={handleSubmit(data => reset.mutateAsync(data).catch(() => {}))}>
-        <TextField id="reset-password" label="New password" type="password" autoComplete="new-password" error={errors.new_password?.message} {...register('new_password')} />
-        <TextField id="reset-confirm" label="Confirm new password" type="password" autoComplete="new-password" error={errors.confirm_new_password?.message} {...register('confirm_new_password')} />
+        <PasswordField id="reset-password" label="New password" autoComplete="new-password" error={errors.new_password?.message} {...register('new_password')} />
+        <PasswordField id="reset-confirm" label="Confirm new password" autoComplete="new-password" error={errors.confirm_new_password?.message} {...register('confirm_new_password')} />
         {errors.root?.message && <Message error>{errors.root.message}</Message>}
         <Button type="submit" disabled={reset.isPending}>{reset.isPending ? 'Saving password…' : 'Reset password'}</Button>
       </form> : <Message error>Open the reset link from your email, or request a new link.</Message>}
@@ -138,7 +144,7 @@ export function VerifyPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: sessionKey }),
   })
   return <GuestPage title="Verify email" text="Confirm the email address attached to your account.">
-    {verify.isSuccess ? <Message>{verify.data.message}</Message> :
+    {verify.isSuccess ? <Message tone="success">{verify.data.message}</Message> :
       token ? <Button type="button" disabled={verify.isPending} onClick={() => verify.mutate()}>
         {verify.isPending ? 'Verifying…' : 'Verify email'}
       </Button> : <Message error>Open the verification link from your email to continue.</Message>}

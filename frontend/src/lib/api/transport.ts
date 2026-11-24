@@ -50,14 +50,15 @@ export function parseApiError(response?: Response, body?: unknown) {
   }) : []
   const delay = retryDelay(response.headers.get('Retry-After')) ?? retryDelay(error.retry_after)
   const detail = string(error.detail)
+  const code = string(error.code)
   const message = response.status === 429
     ? delay ? `Too many requests. Try again in ${Math.ceil(delay)} seconds.` : 'Too many requests. Wait a moment and try again.'
-    : response.status === 503
+    : response.status === 503 && code !== 'SERVICE_UNAVAILABLE'
       ? 'SpendWise is busy. Try again shortly.'
       : detail ?? 'The request could not be completed. Try again.'
   return new ApiError(message, {
     status: response.status,
-    code: string(error.code),
+    code,
     requestId: string(error.request_id) ?? response.headers.get('X-Correlation-ID') ?? undefined,
     retryAfter: delay,
     fields,

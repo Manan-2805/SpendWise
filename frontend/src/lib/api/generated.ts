@@ -1223,16 +1223,12 @@ export interface operations {
                     };
                 };
             };
-            /** @description The API is temporarily at capacity. */
+            /** @description Verification email unavailable */
             503: {
                 headers: {
-                    /** @description Seconds to wait before retrying. */
-                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["OverloadPayload"];
-                };
+                content?: never;
             };
         };
     };

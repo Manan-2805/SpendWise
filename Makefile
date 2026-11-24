@@ -95,12 +95,12 @@ run: prepare-dev  ## Run Granian locally with development settings
 # Docker
 # ─────────────────────────────────────────
 .PHONY: up
-up:  ## Start the development API, worker, PostgreSQL and Redis
-	$(DOCKER_COMP) up -d
+up:  ## Start the development app, database, Redis, worker and Mailpit
+	$(DOCKER_COMP) --profile frontend up -d --wait
 
 .PHONY: up-build
-up-build:  ## Build images and start the stack
-	$(DOCKER_COMP) up -d --build
+up-build:  ## Build images and start the development stack
+	$(DOCKER_COMP) --profile frontend up -d --build --wait
 
 .PHONY: monitoring monitoring-smoke monitoring-stop
 monitoring: install  ## Build and start the local stack with Granian, Prometheus and Grafana
@@ -115,11 +115,11 @@ monitoring-stop:  ## Stop the monitored local stack and keep its data
 
 .PHONY: down
 down:  ## Stop and remove containers
-	$(DOCKER_COMP) down
+	$(DOCKER_COMP) --profile frontend down
 
 .PHONY: down-volumes
 down-volumes:  ## Stop containers and remove volumes (DESTROYS DATA)
-	$(DOCKER_COMP) down -v
+	$(DOCKER_COMP) --profile frontend down -v
 
 .PHONY: logs
 logs:  ## Follow logs from all containers
@@ -259,8 +259,8 @@ check: lint format-check typecheck security-check audit test  ## Run tests, lint
 # Utilities
 # ─────────────────────────────────────────
 .PHONY: seed
-seed: prepare-dev  ## Seed the local development database with sample data
-	@$(DEV_SETTINGS) $(PYTHON) scripts/seed_db.py
+seed: up  ## Seed the Docker development database with sample data
+	$(DOCKER_COMP) exec -T api python -m scripts.seed_db
 
 .PHONY: seed-capacity
 seed-capacity: capacity-services  ## Seed 5,000 users, 20,000 categories and 320,000 transactions in the capacity database

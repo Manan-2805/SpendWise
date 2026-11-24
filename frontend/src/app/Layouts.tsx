@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import type { ReactNode } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
-import { Moon, Sun } from 'lucide-react'
+import { LoaderCircle, Moon, Sun } from 'lucide-react'
 import { Link, NavLink, Navigate, Outlet, useNavigate } from 'react-router'
 import { Brand } from './Brand'
 import { clearAccount } from './query'
@@ -31,8 +31,14 @@ function Header({ children }: { children?: ReactNode }) {
 
 function Content({ children }: { children?: ReactNode }) {
   return <main className="wrap app-main" id="main-content" tabIndex={-1}>
-    <Suspense fallback={<p role="status">Loading page…</p>}>{children ?? <Outlet />}</Suspense>
+    <Suspense fallback={<LoadingPage />}>{children ?? <Outlet />}</Suspense>
   </main>
+}
+
+function LoadingPage() {
+  return <div className="route-loading" role="status">
+    <LoaderCircle className="motion-safe:animate-spin" size={20} aria-hidden="true" />Loading page…
+  </div>
 }
 
 export function GuestLayout() {
@@ -49,7 +55,7 @@ export function WorkspaceLayout() {
       void navigate('/login', { replace: true })
     },
   })
-  if (session.isPending) return <><Header /><Content><p role="status">Loading your workspace…</p></Content></>
+  if (session.isPending) return <><Header /><Content><LoadingPage /></Content></>
   if (session.isError) return <><Header /><Content>
     <Message error>{session.error.message}</Message>
     <Button variant="outline" onClick={() => void session.refetch()}>Try again</Button>

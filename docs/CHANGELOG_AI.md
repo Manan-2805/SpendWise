@@ -1,6 +1,78 @@
 # AI change log
 Every change made by an AI agent: file, what, why. Newest session first.
 
+## 2026-11-24 — `codex/20261124-glass-and-verification` · Icy-blue finish
+
+Apply the requested blue glass palette and clarify the settings needed for external SMTP delivery.
+
+| File | What changed | Why |
+|---|---|---|
+| `frontend/src/styles.css` | Switch light and dark surfaces, navigation accents, and glass artwork to blue and violet | Apply the requested palette while preserving semantic feedback colors |
+| `frontend/index.html` | Update the critical first-paint colors | Match the loaded theme while JavaScript starts |
+| `frontend/e2e/spendwise.spec.ts` | Assert the new dark first-paint color | Keep the startup flash regression current |
+| `frontend/src/features/categories/CategoriesPage.tsx` | Use a blue default swatch | Match the category editor to the app palette |
+| `README.md` | Add a copyable SMTP template, sender and sandbox requirements, and production origin setup | Explain how to send real email and open verification links |
+| `docs/screenshots/frontend/sign-in.png` | Recapture the sign-in artwork | Show the requested palette |
+| `docs/screenshots/frontend/categories.png` | Recapture the category table | Show the requested palette |
+| `docs/screenshots/frontend/dashboard-light.png` | Recapture the light dashboard | Keep the README preview current |
+| `docs/screenshots/frontend/dashboard-dark.png` | Recapture the dark dashboard | Keep the README preview current |
+| `docs/screenshots/frontend/transactions-mobile.png` | Recapture mobile transactions | Show the blue theme at phone width |
+| `docs/CHANGELOG_AI.md` | Record the follow-up changes | Track the session |
+
+The Docker runtime was checked without printing SMTP settings. It still uses Mailpit, with external host and credentials unset. [Amazon SES SMTP credentials](https://docs.aws.amazon.com/ses/latest/dg/smtp-credentials.html) · [Amazon SES sandbox requirements](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html)
+
+`make check` passed with 184 tests and 88.18% coverage after retrying a PyPI timeout. `make frontend-check` passed with 29 tests, and both Chromium tests passed against the rebuilt Docker frontend.
+
+## 2026-11-24 — `codex/20261124-glass-and-verification`
+
+Refresh the SpendWise interface, make verification delivery observable, and run the development app in Docker.
+
+| File | What changed | Why |
+|---|---|---|
+| `Makefile` | Include the frontend in Docker startup and teardown, and seed through the API container | Run the application and seed without a host Python service |
+| `docker-compose.yml` | Add nginx frontend, API readiness, and Mailpit with configurable SMTP settings | Serve the app on one origin and make local email testable |
+| `app/api/v1/endpoints/auth.py` | Report SMTP acceptance or a service error on verification resend | Give the user a result for explicit delivery attempts |
+| `app/services/auth.py` | Commit verification tokens before mailing and surface relay errors | Make the link usable when sent and avoid the previous false success |
+| `app/core/logging.py` | Suppress raw Uvicorn access URLs in development | Keep verification link tokens out of access logs |
+| `tests/integration/test_api/test_auth.py` | Cover accepted mail, absent SMTP, and a failed relay | Verify the real response contract and SMTP call |
+| `tests/unit/test_logging.py` | Assert development skips the raw access log | Catch accidental exposure of verification links |
+| `frontend/index.html` | Apply the saved theme and show a loading shell before React mounts | Close the gap that showed a white page |
+| `frontend/src/app/Layouts.tsx` | Use a consistent route-loading state | Keep the app shell visible during navigation and session loading |
+| `frontend/src/components/fields.tsx` | Add semantic messages and reusable password reveal controls | Share accessible form feedback across screens |
+| `frontend/src/components/ui/sonner.tsx` | Use semantic colors for toast variants | Distinguish success, warning, and error feedback |
+| `frontend/src/features/auth/AuthPages.tsx` | Add animated glass artwork and browser-compatible login and registration hints | Improve sign-in and support password managers |
+| `frontend/src/features/auth/VerificationNotice.tsx` | Present an explicit send action and its success or failure | Make email delivery state visible |
+| `frontend/src/features/categories/CategoriesPage.tsx` | Add a searchable table, native color picker, upload and preview | Manage categories in one accessible view |
+| `frontend/src/features/categories/categoryIcon.ts` | Convert raster uploads into compact monochrome category icons | Reuse the existing server field without a schema change |
+| `frontend/src/features/dashboard/DashboardPage.tsx` | Remove the personalized ledger label | Keep the heading focused on the report |
+| `frontend/src/features/profile/ProfilePage.tsx` | Reuse password reveal controls | Make password changes easier to review before submission |
+| `frontend/src/features/transactions/TransactionTable.tsx` | Group category and date under each description on small screens | Keep amounts and row actions in the mobile viewport |
+| `frontend/src/lib/api/transport.ts` | Preserve the service-unavailable detail separately from overload | Show a meaningful email failure |
+| `frontend/src/styles.css` | Retheme the navigation, glass surfaces, forms, and animation. Remove the wait cursor from disabled buttons | Improve visual depth, theme consistency, and interaction feedback |
+| `frontend/scripts/check-contrast.mjs` | Include warning colors in the contrast budget | Verify semantic warnings in both themes |
+| `frontend/src/test/feature-flows.test.tsx` | Test password hints and reveal, verification errors, and category filters and controls | Protect the user-visible changes |
+| `frontend/e2e/spendwise.spec.ts` | Exercise the new browser flows and capture screenshots | Validate real interactions and document the interface |
+| `frontend/playwright.config.ts` | Permit a running Docker stack as the browser target | Run browser tests without starting a host app service |
+| `docs/openapi.json` | Regenerate the API specification for verification errors | Keep the checked-in contract current |
+| `frontend/src/lib/api/generated.ts` | Regenerate the TypeScript API types | Match the verification response contract |
+| `README.md` | Replace the report-heavy landing page with screenshots, Docker quickstart, and SMTP instructions | Help readers try the app and understand local mail |
+| `docs/api-contract.md` | Describe SMTP acceptance and verification failures | Explain the active API behavior |
+| `docs/screenshots/frontend/sign-in.png` | Capture the glass sign-in panel | Show the entry screen |
+| `docs/screenshots/frontend/categories.png` | Capture the category table | Show the new search and layout |
+| `docs/screenshots/frontend/dashboard-light.png` | Recapture the overview in light mode | Show the current dashboard theme |
+| `docs/screenshots/frontend/dashboard-dark.png` | Recapture the overview in dark mode | Show the current dashboard theme |
+| `docs/screenshots/frontend/transactions-mobile.png` | Capture the compact mobile transaction layout | Show amounts and actions fitting a phone viewport |
+| `docs/DEPENDENCY_CHANGES.md` | Remove the link to the retired frontend plan | Keep the dependency history readable |
+| `docs/AUDIT.md` | Remove the historical audit | Keep current setup and maintenance information in the repository |
+| `docs/capacity.md` | Remove the historical benchmark report | Reduce documentation clutter |
+| `docs/plans/2026-11-23-frontend.md` | Remove the completed frontend plan | Reduce documentation clutter |
+| `docs/plans/2026-11-23-overload.md` | Remove the completed overload plan | Reduce documentation clutter |
+| `docs/CHANGELOG_AI.md` | Record the scope and implementation references | Track the session |
+
+The visual treatment uses layered, tinted CSS glass with solid fallbacks for reduced transparency. The bespoke auth artwork uses CSS and the existing logo. Categories reuse the shadcn table and native file and color inputs, with a small custom encoder for the existing icon field. [Apple materials](https://developer.apple.com/design/human-interface-guidelines/materials) · [Browser sign-in form guidance](https://web.dev/articles/sign-in-form-best-practices) · [GitHub README guidance](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-readmes)
+
+Docker smoke checks passed, and Mailpit accepted both a registration message and an explicit resend. Following the verification link marked the synthetic account verified. `make check` passed with 184 tests and 88.18% coverage. `make frontend-check` passed with 29 tests, and the two Chromium tests passed against the built Docker frontend.
+
 ## 2026-11-24 — `codex/20261124-final-polish`
 
 Cover transaction and report cache regressions, remove dormant OAuth and unused dependencies, and document recovery and remaining limits.

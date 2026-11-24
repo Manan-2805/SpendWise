@@ -364,8 +364,12 @@ async def test_verify_email_invalid_token(client: AsyncClient) -> None:
 
 
 async def test_resend_verification_success(
-    client: AsyncClient, db_session: AsyncSession
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    send = MagicMock()
+    monkeypatch.setattr("app.worker.tasks._send_email", send)
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.example.test")
+    monkeypatch.setattr(settings, "SMTP_FROM", "spendwise@example.test")
     # Create unverified user
     hashed = hash_password("Password123!")
     user = User(
@@ -385,3 +389,33 @@ async def test_resend_verification_success(
 
     response = await client.post("/api/v1/auth/resend-verification")
     assert response.status_code == 200
+    assert (
+        response.json()["message"] == "Verification email accepted by the mail server."
+    )
+    assert send.call_args.args[0] == user.email
+
+
+@pytest.mark.parametrize("smtp_configured", [False, True])
+async def test_resend_verification_reports_email_failure(
+    client: AsyncClient,
+    test_user: User,
+    auth_headers: callable,
+    monkeypatch: pytest.MonkeyPatch,
+    smtp_configured: bool,
+) -> None:
+    from app.worker.tasks import EmailDeliveryError
+
+    monkeypatch.setattr(
+        settings, "SMTP_HOST", "smtp.example.test" if smtp_configured else ""
+    )
+    monkeypatch.setattr(settings, "SMTP_FROM", "spendwise@example.test")
+    send = MagicMock(side_effect=EmailDeliveryError("Relay rejected the message"))
+    monkeypatch.setattr("app.worker.tasks._send_email", send)
+
+    response = await client.post(
+        "/api/v1/auth/resend-verification", headers=auth_headers(test_user)
+    )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "SERVICE_UNAVAILABLE"
+    assert send.call_count == int(smtp_configured)
