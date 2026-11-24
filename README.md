@@ -1,15 +1,20 @@
 # SpendWise
 
-[![CI](https://github.com/Manan-2805/SpendWise/actions/workflows/ci.yml/badge.svg)](https://github.com/Manan-2805/SpendWise/actions/workflows/ci.yml) [![Local coverage: 88.13%](https://img.shields.io/badge/local%20coverage-88.13%25-brightgreen)](#tests-and-checks)
+[![CI](https://github.com/Manan-2805/SpendWise/actions/workflows/ci.yml/badge.svg)](https://github.com/Manan-2805/SpendWise/actions/workflows/ci.yml) [![Local coverage: 88.25%](https://img.shields.io/badge/local%20coverage-88.25%25-brightgreen)](#tests-and-checks)
 
-SpendWise is a REST API for recording income and expenses and summarizing activity by month or category. It uses FastAPI, PostgreSQL, and Redis. The repository includes database migrations, a Celery worker, and tests.
+SpendWise is a personal expense tracker with a React web app and a FastAPI backend. PostgreSQL stores transactions and Redis backs report caching, rate limits, and the Celery queue.
 
 ## Features
 
-- Create and edit categories and transactions, and filter transaction lists.
-- View monthly summaries, category breakdowns, and balance trends with Redis report caching.
-- Register, sign in, rotate refresh tokens, and reset passwords. Celery handles verification and password reset email jobs.
-- Check liveness and cached dependency readiness separately. Excess API requests receive `503` with `Retry-After`.
+- Record income and expenses, manage categories, and filter transactions.
+- View monthly summaries and category breakdowns in the dashboard. The API also exposes balance trends.
+- Sign in, verify email, reset passwords, and manage your profile.
+
+### Screenshots
+
+![Dashboard in light mode](docs/screenshots/frontend/dashboard-light.png)
+
+[Dashboard in dark mode](docs/screenshots/frontend/dashboard-dark.png) · [Transactions on mobile](docs/screenshots/frontend/transactions-mobile.png)
 
 ## Quick start
 
@@ -101,10 +106,11 @@ Repositories centralize ownership filters and PostgreSQL queries. The API comput
 |---|---|
 | `users` | Accounts and verification state |
 | `categories`, `transactions` | User categories and financial entries |
-| `refresh_tokens`, `oauth_accounts` | Refresh session history and provider links |
+| `refresh_tokens` | Refresh session history |
+| `oauth_accounts` | Legacy provider-link table |
 | `audit_logs` | Recorded account and financial events |
 
-Transactions belong to a user and can reference a category. Refresh tokens and provider links also belong to users.
+Transactions belong to a user and can reference a category. Refresh tokens also belong to users.
 
 ## Tests and checks
 
@@ -114,7 +120,7 @@ make check
 make pre-commit-install
 ```
 
-Make starts disposable PostgreSQL and Redis on ports 55432 and 56379 for integration tests. `make test-unit` runs without those services. The full suite enforces 85% application line coverage, and CI builds the image after the hooks pass. The local verification on 2026-11-23 passed 187 tests at 88.13% coverage. Ruff, Mypy, Bandit, and pip-audit also passed.
+Make starts disposable PostgreSQL and Redis on ports 55432 and 56379 for integration tests. `make test-unit` runs without those services. The full suite enforces 85% application line coverage, and CI builds the image after the hooks pass. The local verification on 2026-11-24 passed 181 backend tests at 88.25% coverage and 26 frontend tests. Ruff, Mypy, Bandit, and pip-audit also passed.
 
 ## Performance
 
@@ -129,11 +135,21 @@ A local test used 87% reads and reports, 12% transaction writes, and 1% logins. 
 
 The final 160 req/s round passed the thresholds but had worse throughput and more errors than the baseline. It returned 57 retryable `503` responses (0.30%). At 640 offered req/s, the sweep's `503` responses had a p95 of 154 ms and liveness stayed at 100%. [Full measurements and scope](docs/capacity.md)
 
-**Known limits.** These measurements apply to this laptop and workload. The 240 and 640 req/s results come from short sweep rounds. At 640 offered req/s, the API shed most requests.
+These measurements apply to this laptop and workload. The 240 and 640 req/s results come from short sweep rounds. At 640 offered req/s, the API shed most requests.
 
 ```sh
 make capacity CAPACITY_ARGS='--rates 160 --seconds 120'
 ```
+
+## Known limits
+
+- **A04, A06** · Redis TLS and isolation of broker and cache are deployment choices. Recovery tokens travel in Celery job payloads, and an enqueue failure after commit is logged without a durable retry.
+- **A13, A14** · Soft-deleted users still reserve their email and username. Category PATCH lacks the create-time length checks for icon and description.
+- **A23** · Transaction lists still use substring search and offset pagination.
+- **A25, A26** · Most API integration tests override the request session. Default test invocations share a disposable stack, and the quick benchmark writes to that test database.
+- **A27, A28** · Client-IP rate limiting depends on proxy configuration. Some container image references are mutable tags, and the metrics route relies on network access controls.
+
+See the [original audit](docs/AUDIT.md) for finding IDs and the [restore drill](docs/RESTORE.md) for the manual backup procedure and recovery limits.
 
 ## Deployment
 
@@ -161,7 +177,7 @@ Run Granian behind HTTPS. Probe `/api/v1/health/live` for liveness and `/api/v1/
 
 Use Node 22.23.5 and npm 10.9.9. From the repository root, run `make frontend-install`, start the API with `make dev`, then run `make frontend-dev` in another terminal. Open http://localhost:3000. Vite requires port 3000 and proxies `/api/v1` with the browser's Host so both requests and HttpOnly cookies use the frontend origin.
 
-The app covers account entry, email verification and password reset, monthly reporting, transaction and category management, and profile changes. It displays exact decimal amounts. Set the public build variable `VITE_CURRENCY` to an ISO currency code if you want localized currency display.
+Set the public build variable `VITE_CURRENCY` to an ISO currency code if you want localized currency display.
 
 ### Checks and deployment
 
@@ -170,9 +186,3 @@ The app covers account entry, email verification and password reset, monthly rep
 - For development email, run `docker compose -f docker-compose.mailpit.yml --profile mailpit up -d mailpit` and open http://localhost:8025. Start the local worker with SMTP host `127.0.0.1`, port `1025`, a local sender, `SMTP_STARTTLS=false`, and an empty username. The standard development command leaves Mailpit disabled.
 - The production Compose file includes the frontend nginx service. Serve it through a public HTTPS ingress that preserves the public Host. Supply `SPENDWISE_FRONTEND_URL` and set `SPENDWISE_CORS_ORIGINS` to an array with exactly that HTTPS origin at deployment. Keep deployment values out of Git. nginx serves SPA routes and proxies API paths on the same origin.
 - Resolve the [nginx runtime image audit findings](docs/DEPENDENCY_CHANGES.md#production-image-audit--remediation-pending-approval) before production deployment.
-
-### Screenshots
-
-![Dashboard in light mode](docs/screenshots/frontend/dashboard-light.png)
-
- [Dashboard in dark mode](docs/screenshots/frontend/dashboard-dark.png) · [Transactions on mobile](docs/screenshots/frontend/transactions-mobile.png)

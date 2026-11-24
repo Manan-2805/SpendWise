@@ -24,11 +24,15 @@ Cover transaction and report cache regressions, remove dormant OAuth and unused 
 | `docs/api-contract.md` | Remove the retired Google flow reference | Keep the live API guide current |
 | `docs/openapi.json` | Regenerate the API schema without the Google routes | Publish the current contract |
 | `frontend/src/lib/api/generated.ts` | Regenerate OpenAPI types | Keep the client aligned with the API |
+| `README.md` | Put features and screenshots first, refresh test metrics, and list remaining audit findings | Present current capabilities and limits |
+| `docs/RESTORE.md` | Record format, commands, and output from a disposable PostgreSQL 16 restore | Make the manual recovery procedure repeatable |
 | `docs/CHANGELOG_AI.md` | Record the final polish changes and verification | Track the changes for this session |
 
 All four new cases passed with the existing rules. In a temporary copy, removing the transaction type guard failed all three transaction cases. Removing either category cache bump independently failed the report case.
 
 The registry metadata request timed out during resolution. The removal-only lockfile was pruned from the existing graph, checked with `uv lock --check --offline`, and compared against the previous package versions. `make openapi` and `npm --prefix frontend run api:generate` regenerated the API contract. [uv locking and syncing](https://docs.astral.sh/uv/concepts/projects/sync/) · [openapi-typescript CLI](https://openapi-ts.dev/cli)
+
+The disposable restore passed with PostgreSQL 16.16. The source and restore matched on the Alembic revision and all six application table counts. [PostgreSQL 16 pg_dump](https://www.postgresql.org/docs/16/app-pgdump.html) · [PostgreSQL 16 pg_restore](https://www.postgresql.org/docs/16/app-pgrestore.html)
 
 ## 2026-11-23 — `codex/20261123-frontend`
 
