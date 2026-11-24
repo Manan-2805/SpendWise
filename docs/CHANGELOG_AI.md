@@ -1,6 +1,18 @@
 # AI change log
 Every change made by an AI agent: file, what, why. Newest session first.
 
+## 2026-11-24 — `codex/20261124-final-polish`
+
+Cover transaction and report cache regressions, remove dormant OAuth and unused dependencies, and document recovery and remaining limits.
+
+| File | What changed | Why |
+|---|---|---|
+| `tests/integration/test_api/test_transactions.py` | Assert HTTP 409 for mismatched category type on create and on updates to either field | Exercise the shared type guard through both API write paths |
+| `tests/integration/test_api/test_reports.py` | Prime Redis and verify new monthly cache keys and category breakdowns after rename and reassignment | Catch either missing invalidation while preserving monthly totals |
+| `docs/CHANGELOG_AI.md` | Record the final polish changes and verification | Track the changes for this session |
+
+All four new cases passed with the existing rules. In a temporary copy, removing the transaction type guard failed all three transaction cases. Removing either category cache bump independently failed the report case.
+
 ## 2026-11-23 — `codex/20261123-frontend`
 
 Step 0 · Discover and document the API contract for the SpendWise frontend.

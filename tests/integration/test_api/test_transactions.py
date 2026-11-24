@@ -6,6 +6,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.category import Category
 from app.models.transaction import Transaction
 from app.models.user import User
 from tests.factories.category import CategoryFactory
@@ -115,6 +116,55 @@ async def test_create_transaction_invalid_category(
     response = await client.post("/api/v1/transactions/", json=payload, headers=headers)
     assert response.status_code == 404
     assert response.json()["code"] == "CATEGORY_NOT_FOUND"
+
+
+@pytest.mark.usefixtures("db_session")
+async def test_create_transaction_rejects_mismatched_category_type(
+    client: AsyncClient,
+    verified_user: User,
+    auth_headers: callable,
+    test_category: Category,
+) -> None:
+    response = await client.post(
+        "/api/v1/transactions/",
+        headers=auth_headers(verified_user),
+        json={
+            "category_id": test_category.id,
+            "amount": "25.50",
+            "description": "Income under an expense category",
+            "transaction_date": "2026-06-03",
+            "type": "income",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "CONFLICT"
+
+
+@pytest.mark.parametrize("change", ["type", "category"])
+async def test_update_transaction_rejects_mismatched_category_type(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    verified_user: User,
+    auth_headers: callable,
+    test_transaction: Transaction,
+    change: str,
+) -> None:
+    income_category = CategoryFactory.build(user=verified_user, type="income")
+    db_session.add(income_category)
+    await db_session.flush()
+
+    payload = (
+        {"type": "income"} if change == "type" else {"category_id": income_category.id}
+    )
+    response = await client.patch(
+        f"/api/v1/transactions/{test_transaction.id}",
+        headers=auth_headers(verified_user),
+        json=payload,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "CONFLICT"
 
 
 @pytest.mark.usefixtures("db_session")
