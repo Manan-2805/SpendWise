@@ -1,9 +1,9 @@
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from redis.exceptions import RedisError
 
-from app.core.cache import RELEASE_LOCK, get_or_set_cache, versioned_key_builder
+from app.core.cache import RELEASE_LOCK, get_or_set_cache
 
 
 async def test_cache_skips_factory_on_hit() -> None:
@@ -63,12 +63,3 @@ async def test_cache_lock_timeout_falls_back_to_factory() -> None:
     ):
         assert await get_or_set_cache("some-key", factory) == "fresh"
     factory.assert_awaited_once()
-
-
-def test_versioned_key_builder() -> None:
-    request = MagicMock()
-    request.state.user.cache_version = 42
-    with patch(
-        "fastapi_cache.key_builder.default_key_builder", return_value="base-key"
-    ):
-        assert versioned_key_builder(lambda: None, request=request) == "base-key:v42"

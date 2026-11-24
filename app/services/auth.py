@@ -1,6 +1,5 @@
 import asyncio
 import secrets
-import string
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -252,91 +251,6 @@ class AuthService:
             raise InvalidCredentialsError()
         await self.user_service.change_password(user_id, current_password, new_password)
         await self.auth_repo.invalidate_sessions(user_id)
-
-    async def login_or_register_oauth(
-        self,
-        provider: str,
-        provider_account_id: str,
-        email: str,
-        username: str,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
-    ) -> tuple[str, str, User]:
-        """Link or create account via OAuth, then issue token pair and audit log."""
-        oauth_acc = await self.auth_repo.get_oauth_account(
-            provider, provider_account_id
-        )
-        if oauth_acc:
-            user = await self.user_service.repo.get_by_id(oauth_acc.user_id)
-            if not user or user.deleted_at is not None:
-                raise InvalidCredentialsError("OAuth account user not found")
-        else:
-            user = await self.user_service.repo.get_by_email(email)
-            if not user:
-                base_username = username or email.split("@")[0]
-                existing_username = await self.user_service.repo.get_by_username(
-                    base_username
-                )
-                if existing_username:
-                    base_username = f"{base_username}_{''.join(secrets.choice(string.digits) for _ in range(4))}"
-
-                user = await self.user_service.repo.create(
-                    email=email.lower(),
-                    username=base_username.lower(),
-                    hashed_password=None,
-                    is_active=True,
-                    is_verified=True,
-                )
-
-                await self.audit_service.log_action(
-                    action="USER_CREATED",
-                    resource_type="User",
-                    resource_id=user.id,
-                    user_id=user.id,
-                )
-
-            await self.auth_repo.create_oauth_account(
-                user_id=user.id,
-                provider=provider,
-                provider_account_id=provider_account_id,
-            )
-            await self.audit_service.log_action(
-                action="OAUTH_LINKED",
-                resource_type="OAuthAccount",
-                resource_id=provider_account_id,
-                user_id=user.id,
-            )
-
-        if not user.is_active:
-            raise InactiveUserError()
-
-        # Issue tokens
-        access_token = create_access_token(
-            subject=user.id, auth_version=user.auth_version or 0
-        )
-        refresh_token, jti = create_refresh_token(subject=user.id)
-        token_hash = hash_refresh_token(refresh_token)
-        payload = verify_token(refresh_token, expected_type="refresh")
-        expires_at = datetime.fromtimestamp(payload["exp"], tz=UTC)
-
-        await self.auth_repo.create_refresh_token(
-            user_id=user.id,
-            jti=jti,
-            family_id=jti,
-            token_hash=token_hash,
-            expires_at=expires_at,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-
-        await self.audit_service.log_action(
-            action="LOGIN_SUCCESS",
-            resource_type="User",
-            resource_id=user.id,
-            user_id=user.id,
-            new_values={"method": f"oauth_{provider}"},
-        )
-        return access_token, refresh_token, user
 
     async def forgot_password(self, email: str) -> None:
         """Generate reset token, trigger reset email Celery task, and audit request."""
